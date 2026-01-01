@@ -1,0 +1,127 @@
+syntax = "proto3";
+
+package watchdog;
+
+service AgentService {
+  // Agent registration and heartbeats
+  rpc RegisterAgent(AgentRegistration) returns (RegistrationResponse);
+  rpc Heartbeat(AgentHeartbeat) returns (Ack);
+
+  // Application management
+  rpc StartApplication(StartAppRequest) returns (StartAppResponse);
+  rpc StopApplication(StopAppRequest) returns (StopAppResponse);
+  rpc RestartApplication(RestartAppRequest) returns (RestartAppResponse);
+
+  // Status reporting
+  rpc ReportStatus(StatusReport) returns (Ack);
+
+  // Streaming for real-time commands
+  rpc CommandStream(stream AgentStatus) returns (stream Command);
+}
+
+message AgentRegistration {
+  string agent_id = 1;
+  string hostname = 2;
+  string ip_address = 3;
+  string os_version = 4;
+  int32 cpu_cores = 5;
+  int32 total_memory_mb = 6;
+  repeated string capabilities = 7;
+}
+
+message RegistrationResponse {
+  bool success = 1;
+  string message = 2;
+  string assigned_agent_id = 3;
+}
+
+message AgentHeartbeat {
+  string agent_id = 1;
+  double cpu_percent = 2;
+  double memory_mb = 3;
+  int32 total_processes = 4;
+}
+
+message Ack {
+  bool success = 1;
+  string message = 2;
+}
+
+message StartAppRequest {
+  string app_id = 1;
+  string agent_id = 2;
+  int32 instance_count = 3;
+  map<string, string> environment_vars = 4;
+}
+
+message StartAppResponse {
+  bool success = 1;
+  string message = 2;
+  repeated string instance_ids = 3;
+}
+
+message StopAppRequest {
+  string app_id = 1;
+  string agent_id = 2;
+  string instance_id = 3; // empty for all instances
+  bool force = 4;
+}
+
+message StopAppResponse {
+  bool success = 1;
+  string message = 2;
+  int32 stopped_count = 3;
+}
+
+message RestartAppRequest {
+  string app_id = 1;
+  string agent_id = 2;
+  string instance_id = 3; // empty for all instances
+}
+
+message RestartAppResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message StatusReport {
+  string agent_id = 1;
+  repeated AppInstanceStatus instances = 2;
+  double system_cpu_percent = 3;
+  double system_memory_mb = 4;
+  int64 timestamp = 5;
+}
+
+message AppInstanceStatus {
+  string instance_id = 1;
+  string app_id = 2;
+  int32 status = 3; // 0=Unknown, 1=Running, 2=Stopped, 3=Error
+  double cpu_percent = 4;
+  double memory_mb = 5;
+  int32 process_id = 6;
+  int64 uptime_seconds = 7;
+}
+
+message AgentStatus {
+  string agent_id = 1;
+  bool is_healthy = 2;
+  double load_average = 3;
+}
+
+message Command {
+  CommandType type = 1;
+  string target_app_id = 2;
+  string target_instance_id = 3;
+  string target_agent_id = 4;
+  map<string, string> parameters = 5;
+  string command_id = 6;
+}
+
+enum CommandType {
+  START_INSTANCE = 0;
+  STOP_INSTANCE = 1;
+  RESTART_INSTANCE = 2;
+  SCALE_UP = 3;
+  SCALE_DOWN = 4;
+  HEALTH_CHECK = 5;
+}
