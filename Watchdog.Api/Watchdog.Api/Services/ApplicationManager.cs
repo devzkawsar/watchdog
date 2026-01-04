@@ -11,6 +11,7 @@ public interface IApplicationManager
     Task<bool> UpdateApplicationAsync(string id, UpdateApplicationRequest request);
     Task<bool> DeleteApplicationAsync(string id);
     Task<IEnumerable<ApplicationInstance>> GetApplicationInstancesAsync(string applicationId);
+    Task<bool> UpdateInstanceStatusAsync(string instanceId, string status, double? cpuPercent = null, double? memoryMB = null);
     Task<bool> StartApplicationAsync(string applicationId);
     Task<bool> StopApplicationAsync(string applicationId);
     Task<bool> RestartApplicationAsync(string applicationId);
@@ -134,6 +135,12 @@ public class ApplicationManager : IApplicationManager
     public async Task<IEnumerable<ApplicationInstance>> GetApplicationInstancesAsync(string applicationId)
     {
         return await _applicationRepository.GetApplicationInstancesAsync(applicationId);
+    }
+    
+    public async Task<bool> UpdateInstanceStatusAsync(string instanceId, string status, double? cpuPercent = null, double? memoryMB = null)
+    {
+        var updated = await _applicationRepository.UpdateInstanceStatusAsync(instanceId, status, cpuPercent, memoryMB);
+        return updated > 0;
     }
     
     public async Task<bool> StartApplicationAsync(string applicationId)

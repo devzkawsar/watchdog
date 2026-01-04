@@ -1,13 +1,17 @@
 ﻿using System.Collections.Concurrent;
+using System.Data;
+using Dapper;
 using Grpc.Core;
 using System.Text.Json;
-using  Watchdog.Api.Protos;
+using Watchdog.Api.Data;
+using Watchdog.Api.Protos;
 using Watchdog.Api.Services;
 
 namespace Watchdog.Api.gRPC;
 
 public class AgentGrpcServiceImpl : AgentService.AgentServiceBase
 {
+    private readonly IDbConnectionFactory _connectionFactory;
     private readonly IAgentManager _agentManager;
     private readonly IApplicationManager _applicationManager;
     private readonly ICommandService _commandService;
@@ -15,15 +19,17 @@ public class AgentGrpcServiceImpl : AgentService.AgentServiceBase
     
     // Track connected agents
     private static readonly ConcurrentDictionary<string, 
-        (IServerStreamWriter<ControlPlaneMessa> Stream, DateTime LastSeen)> 
+        (IServerStreamWriter<ControlPlaneMessage> Stream, DateTime LastSeen)> 
         _connectedAgents = new();
     
     public AgentGrpcServiceImpl(
+        IDbConnectionFactory connectionFactory,
         IAgentManager agentManager,
         IApplicationManager applicationManager,
         ICommandService commandService,
         ILogger<AgentGrpcServiceImpl> logger)
     {
+        _connectionFactory = connectionFactory;
         _agentManager = agentManager;
         _applicationManager = applicationManager;
         _commandService = commandService;
@@ -74,7 +80,7 @@ public class AgentGrpcServiceImpl : AgentService.AgentServiceBase
                 var app = assignedApplications.First(a => a.Id == assignment.ApplicationId);
                 foreach (var portReq in app.PortRequirements)
                 {
-                    assignment.Ports.Add(new PortRequirement
+                    assignment.Ports.Add(new Watchdog.Api.Protos.PortRequirement
                     {
                         Name = portReq.Name,
                         InternalPort = portReq.InternalPort,
@@ -137,6 +143,7 @@ public class AgentGrpcServiceImpl : AgentService.AgentServiceBase
             {
                 CommandId = cmd.CommandId,
                 CommandType = cmd.CommandType,
+                AgentId = cmd.AgentId,
                 ApplicationId = cmd.ApplicationId,
                 InstanceId = cmd.InstanceId,
                 Parameters = cmd.Parameters,
@@ -259,7 +266,8 @@ public class AgentGrpcServiceImpl : AgentService.AgentServiceBase
                                     ExternalPort = p.ExternalPort,
                                     Protocol = p.Protocol
                                 })},
-                                HealthCheckUrl = spawnParams.HealthCheckUrl
+                                HealthCheckUrl = spawnParams.HealthCheckUrl,
+                                HealthCheckInterval = spawnParams.HealthCheckInterval
                             };
                         }
                         break;
@@ -425,16 +433,23 @@ public class AgentGrpcServiceImpl : AgentService.AgentServiceBase
         return message.MessageCase switch
         {
             AgentMessage.MessageOneofCase.Heartbeat => message.Heartbeat.AgentId,
-            AgentMessage.MessageOneofCase.Spawned => message.Spawned.ApplicationId.Split('-')[1], // Parse from instance ID
-            AgentMessage.MessageOneofCase.Stopped => message.Stopped.ApplicationId.Split('-')[1],
+            AgentMessage.MessageOneofCase.Spawned => ExtractAgentIdFromInstanceId(message.Spawned.InstanceId),
+            AgentMessage.MessageOneofCase.Stopped => ExtractAgentIdFromInstanceId(message.Stopped.InstanceId),
             AgentMessage.MessageOneofCase.Error => message.Error.AgentId,
             _ => string.Empty
         };
     }
+
+    private static string ExtractAgentIdFromInstanceId(string instanceId)
+    {
+        // Instance ID format: appId-agentId-uuid
+        var parts = instanceId.Split('-');
+        return parts.Length >= 2 ? parts[1] : string.Empty;
+    }
     
     private async Task RecordInstanceSpawnedAsync(string agentId, ApplicationSpawned spawned)
     {
-        using var connection = new SqlConnection(_connectionString);
+        using var connection = _connectionFactory.CreateConnection();
         
         const string sql = @"
             INSERT INTO ApplicationInstances 
@@ -457,7 +472,7 @@ public class AgentGrpcServiceImpl : AgentService.AgentServiceBase
     
     private async Task RecordApplicationPortsAsync(string instanceId, List<PortMapping> ports)
     {
-        using var connection = new SqlConnection(_connectionString);
+        using var connection = _connectionFactory.CreateConnection();
         
         const string sql = @"
             UPDATE ApplicationInstances 
@@ -471,7 +486,7 @@ public class AgentGrpcServiceImpl : AgentService.AgentServiceBase
         });
     }
     
-    private async Task<ControlPlaneMessage> ConvertToControlPlaneMessageAsync(CommandQueueItem cmd)
+    private Task<ControlPlaneMessage> ConvertToControlPlaneMessageAsync(CommandQueueItem cmd)
     {
         var message = new ControlPlaneMessage();
         
@@ -488,7 +503,16 @@ public class AgentGrpcServiceImpl : AgentService.AgentServiceBase
                         ExecutablePath = spawnParams.ExecutablePath,
                         Arguments = spawnParams.Arguments,
                         WorkingDirectory = spawnParams.WorkingDirectory,
-                        EnvironmentVariables = { spawnParams.EnvironmentVariables }
+                        EnvironmentVariables = { spawnParams.EnvironmentVariables },
+                        Ports = { spawnParams.Ports.Select(p => new PortMapping
+                        {
+                            Name = p.Name,
+                            InternalPort = p.InternalPort,
+                            ExternalPort = p.ExternalPort,
+                            Protocol = p.Protocol
+                        })},
+                        HealthCheckUrl = spawnParams.HealthCheckUrl,
+                        HealthCheckInterval = spawnParams.HealthCheckInterval
                     };
                 }
                 break;
@@ -503,7 +527,7 @@ public class AgentGrpcServiceImpl : AgentService.AgentServiceBase
                 break;
         }
         
-        return message;
+        return Task.FromResult(message);
     }
 }
 
@@ -515,6 +539,8 @@ public class SpawnCommandParams
     public Dictionary<string, string> EnvironmentVariables { get; set; } = new();
     public List<PortMapping> Ports { get; set; } = new();
     public string HealthCheckUrl { get; set; } = string.Empty;
+    public int HealthCheckInterval { get; set; } = 30;
+    public int InstanceIndex { get; set; }
 }
 
 public class KillCommandParams

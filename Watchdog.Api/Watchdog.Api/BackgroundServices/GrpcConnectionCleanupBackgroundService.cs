@@ -1,4 +1,6 @@
-﻿namespace Watchdog.Api.BackgroundServices;
+using Watchdog.Api.Services;
+
+namespace Watchdog.Api.BackgroundServices;
 
 public class GrpcConnectionCleanupBackgroundService : BackgroundService
 {

@@ -3,6 +3,7 @@ using System.Data;
 using System.Text.Json;
 using Watchdog.Api.Data;
 using Watchdog.Api.gRPC;
+using Watchdog.Api.Protos;
 
 namespace Watchdog.Api.Services;
 
@@ -34,7 +35,7 @@ public interface ICommandService
 public class CommandService : ICommandService
 {
     private readonly IDbConnectionFactory _connectionFactory;
-    private readonly IAgentGrpcServic _agentGrpcService;
+    private readonly IAgentGrpcService _agentGrpcService;
     private readonly INetworkManager _networkManager;
     private readonly ILogger<CommandService> _logger;
     

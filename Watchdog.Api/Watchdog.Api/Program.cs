@@ -1,7 +1,8 @@
-using Microsoft.EntityFrameworkCore;
-using Watchdog.WebApi.Data;
-using Watchdog.WebApi.Services;
-using Watchdog.WebApi.BackgroundServices;
+using Microsoft.OpenApi.Models;
+using Watchdog.Api.BackgroundServices;
+using Watchdog.Api.Data;
+using Watchdog.Api.gRPC;
+using Watchdog.Api.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -19,19 +20,23 @@ builder.Services.AddSwaggerGen(c =>
 builder.Services.AddSingleton<IDbConnectionFactory>(sp =>
 {
     var config = sp.GetRequiredService<IConfiguration>();
-    return new SqlServerConnectionFactory(config.GetConnectionString("Default"));
+    var connectionString = config.GetConnectionString("Default");
+    if (string.IsNullOrWhiteSpace(connectionString))
+        throw new InvalidOperationException("Connection string 'Default' is not configured.");
+
+    return new SqlServerConnectionFactory(connectionString);
 });
 
 // Register Repositories
 builder.Services.AddScoped<IApplicationRepository, ApplicationRepository>();
-builder.Services.AddScoped<IAgentRepository, AgentRepository>();
-builder.Services.AddScoped<IInstanceRepository, InstanceRepository>();
 
 // Register Services
 builder.Services.AddScoped<IApplicationManager, ApplicationManager>();
 builder.Services.AddScoped<IAgentManager, AgentManager>();
 builder.Services.AddScoped<IScalingEngine, ScalingEngine>();
 builder.Services.AddScoped<ICommandService, CommandService>();
+builder.Services.AddScoped<INetworkManager, NetworkManager>();
+builder.Services.AddSingleton<IAgentGrpcService, AgentGrpcService>();
 
 // gRPC Services
 builder.Services.AddGrpc(options =>
@@ -42,9 +47,9 @@ builder.Services.AddGrpc(options =>
 });
 
 // Background Services
-builder.Services.AddHostedService<HealthCheckBackgroundService>();
 builder.Services.AddHostedService<ScalingBackgroundService>();
 builder.Services.AddHostedService<CommandDispatcherBackgroundService>();
+builder.Services.AddHostedService<GrpcConnectionCleanupBackgroundService>();
 
 // HTTP Client for agent communication
 builder.Services.AddHttpClient();
@@ -63,7 +68,7 @@ app.UseAuthorization();
 app.MapControllers();
 
 // Map gRPC service
-app.MapGrpcService<AgentGrpcService>();
+app.MapGrpcService<AgentGrpcServiceImpl>();
 
 // Health check endpoint
 app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = DateTime.UtcNow }));

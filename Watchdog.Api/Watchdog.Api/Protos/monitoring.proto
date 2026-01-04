@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package Watchdog.Api;
 
-option csharp_namespace = " Watchdog.Api.Protos";
+option csharp_namespace = "Watchdog.Api.Protos";
 
 // Service for agents to connect to
 service AgentService {
@@ -125,6 +125,7 @@ message CommandRequest {
   string instance_id = 4;
   string parameters = 5;  // JSON
   int64 timestamp = 6;
+  string agent_id = 7;
 }
 
 message CommandResponse {
@@ -145,6 +146,7 @@ message SpawnCommand {
   map<string, string> environment_variables = 6;
   repeated PortMapping ports = 7;
   string health_check_url = 8;
+  int32 health_check_interval = 9;
 }
 
 message KillCommand {

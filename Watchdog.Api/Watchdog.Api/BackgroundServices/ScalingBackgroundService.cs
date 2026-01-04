@@ -4,15 +4,15 @@ namespace Watchdog.Api.BackgroundServices;
 
 public class ScalingBackgroundService : BackgroundService
 {
-    private readonly IScalingEngine _scalingEngine;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<ScalingBackgroundService> _logger;
     private readonly TimeSpan _interval = TimeSpan.FromSeconds(60); // Check every minute
     
     public ScalingBackgroundService(
-        IScalingEngine scalingEngine,
+        IServiceScopeFactory scopeFactory,
         ILogger<ScalingBackgroundService> logger)
     {
-        _scalingEngine = scalingEngine;
+        _scopeFactory = scopeFactory;
         _logger = logger;
     }
     
@@ -25,7 +25,9 @@ public class ScalingBackgroundService : BackgroundService
             try
             {
                 _logger.LogDebug("Checking application scaling...");
-                await _scalingEngine.CheckAndScaleApplicationsAsync();
+                using var scope = _scopeFactory.CreateScope();
+                var scalingEngine = scope.ServiceProvider.GetRequiredService<IScalingEngine>();
+                await scalingEngine.CheckAndScaleApplicationsAsync();
             }
             catch (Exception ex)
             {

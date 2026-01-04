@@ -1,22 +1,22 @@
-﻿using System.Data.SqlClient;
-using Dapper;
+﻿using Watchdog.Api.gRPC;
+using Watchdog.Api.Protos;
 using Watchdog.Api.Services;
 
 namespace Watchdog.Api.BackgroundServices;
 
 public class CommandDispatcherBackgroundService : BackgroundService
 {
-    private readonly ICommandService _commandService;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly IAgentGrpcService _agentGrpcService;
     private readonly ILogger<CommandDispatcherBackgroundService> _logger;
     private readonly TimeSpan _interval = TimeSpan.FromSeconds(10);
     
     public CommandDispatcherBackgroundService(
-        ICommandService commandService,
+        IServiceScopeFactory scopeFactory,
         IAgentGrpcService agentGrpcService,
         ILogger<CommandDispatcherBackgroundService> logger)
     {
-        _commandService = commandService;
+        _scopeFactory = scopeFactory;
         _agentGrpcService = agentGrpcService;
         _logger = logger;
     }
@@ -29,11 +29,15 @@ public class CommandDispatcherBackgroundService : BackgroundService
         {
             try
             {
+                using var scope = _scopeFactory.CreateScope();
+                var commandService = scope.ServiceProvider.GetRequiredService<ICommandService>();
+                var agentManager = scope.ServiceProvider.GetRequiredService<IAgentManager>();
+
                 // Clean up old commands
-                await _commandService.CleanupOldCommandsAsync();
+                await commandService.CleanupOldCommandsAsync();
                 
                 // Dispatch pending commands to all agents
-                await DispatchPendingCommandsAsync();
+                await DispatchPendingCommandsAsync(agentManager, commandService);
                 
                 // Wait for next cycle
                 await Task.Delay(_interval, stoppingToken);
@@ -48,22 +52,17 @@ public class CommandDispatcherBackgroundService : BackgroundService
         _logger.LogInformation("Command dispatcher background service stopped");
     }
     
-    private async Task DispatchPendingCommandsAsync()
+    private async Task DispatchPendingCommandsAsync(
+        IAgentManager agentManager,
+        ICommandService commandService)
     {
         try
         {
-            // Get all online agents
-            using var connection = new SqlConnection(_connectionString);
-            const string getAgentsSql = @"
-                SELECT Id FROM Agents 
-                WHERE Status = 'Online' 
-                AND LastHeartbeat > DATEADD(MINUTE, -5, GETUTCDATE())";
-            
-            var agentIds = await connection.QueryAsync<string>(getAgentsSql);
-            
-            foreach (var agentId in agentIds)
+            var agents = await agentManager.GetOnlineAgentsAsync();
+
+            foreach (var agent in agents)
             {
-                await DispatchCommandsToAgentAsync(agentId);
+                await DispatchCommandsToAgentAsync(agent.Id, commandService);
             }
         }
         catch (Exception ex)
@@ -72,11 +71,11 @@ public class CommandDispatcherBackgroundService : BackgroundService
         }
     }
     
-    private async Task DispatchCommandsToAgentAsync(string agentId)
+    private async Task DispatchCommandsToAgentAsync(string agentId, ICommandService commandService)
     {
         try
         {
-            var pendingCommands = await _commandService.GetPendingCommandsAsync(agentId);
+            var pendingCommands = await commandService.GetPendingCommandsAsync(agentId);
             
             if (!pendingCommands.Any())
                 return;
@@ -104,6 +103,7 @@ public class CommandDispatcherBackgroundService : BackgroundService
             {
                 CommandId = command.CommandId,
                 CommandType = command.CommandType,
+                AgentId = agentId,
                 ApplicationId = command.ApplicationId,
                 InstanceId = command.InstanceId,
                 Parameters = command.Parameters,
@@ -115,7 +115,9 @@ public class CommandDispatcherBackgroundService : BackgroundService
             
             if (sent)
             {
-                await _commandService.MarkCommandAsSentAsync(command.CommandId);
+                using var scope = _scopeFactory.CreateScope();
+                var commandService = scope.ServiceProvider.GetRequiredService<ICommandService>();
+                await commandService.MarkCommandAsSentAsync(command.CommandId);
                 _logger.LogDebug(
                     "Sent command {CommandId} to agent {AgentId}", 
                     command.CommandId, agentId);
