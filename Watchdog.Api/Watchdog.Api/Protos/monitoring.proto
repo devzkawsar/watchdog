@@ -1,127 +1,199 @@
 syntax = "proto3";
 
-package watchdog;
+package Watchdog.Api;
 
+option csharp_namespace = " Watchdog.Api.Protos";
+
+// Service for agents to connect to
 service AgentService {
-  // Agent registration and heartbeats
-  rpc RegisterAgent(AgentRegistration) returns (RegistrationResponse);
-  rpc Heartbeat(AgentHeartbeat) returns (Ack);
+  // Agent registers with control plane
+  rpc RegisterAgent (AgentRegistrationRequest) returns (AgentRegistrationResponse);
 
-  // Application management
-  rpc StartApplication(StartAppRequest) returns (StartAppResponse);
-  rpc StopApplication(StopAppRequest) returns (StopAppResponse);
-  rpc RestartApplication(RestartAppRequest) returns (RestartAppResponse);
+  // Agent reports status
+  rpc ReportStatus (StatusReportRequest) returns (StatusReportResponse);
 
-  // Status reporting
-  rpc ReportStatus(StatusReport) returns (Ack);
+  // Bi-directional stream for real-time communication
+  rpc CommandStream (stream AgentMessage) returns (stream ControlPlaneMessage);
 
-  // Streaming for real-time commands
-  rpc CommandStream(stream AgentStatus) returns (stream Command);
+  // Execute specific command
+  rpc ExecuteCommand (CommandRequest) returns (CommandResponse);
 }
 
-message AgentRegistration {
+// Agent -> Control Plane messages
+message AgentRegistrationRequest {
   string agent_id = 1;
-  string hostname = 2;
+  string agent_name = 2;
   string ip_address = 3;
-  string os_version = 4;
-  int32 cpu_cores = 5;
-  int32 total_memory_mb = 6;
-  repeated string capabilities = 7;
+  string hostname = 4;
+  int32 total_memory_mb = 5;
+  int32 cpu_cores = 6;
+  string os_version = 7;
 }
 
-message RegistrationResponse {
+message StatusReportRequest {
+  string agent_id = 1;
+  repeated ApplicationStatus application_statuses = 2;
+  SystemMetrics system_metrics = 3;
+  int64 timestamp = 4;
+}
+
+message AgentMessage {
+  oneof message {
+    Heartbeat heartbeat = 1;
+    ApplicationSpawned spawned = 2;
+    ApplicationStopped stopped = 3;
+    ErrorReport error = 4;
+  }
+}
+
+// Control Plane -> Agent messages
+message ControlPlaneMessage {
+  oneof message {
+    SpawnCommand spawn = 1;
+    KillCommand kill = 2;
+    RestartCommand restart = 3;
+    UpdateCommand update = 4;
+    HealthCheckRequest health_check = 5;
+  }
+}
+
+// Common messages
+message AgentRegistrationResponse {
   bool success = 1;
   string message = 2;
-  string assigned_agent_id = 3;
+  string assigned_id = 3;
+  repeated ApplicationAssignment applications = 4;
 }
 
-message AgentHeartbeat {
-  string agent_id = 1;
-  double cpu_percent = 2;
-  double memory_mb = 3;
+message StatusReportResponse {
+  bool success = 1;
+  string message = 2;
+  repeated CommandRequest pending_commands = 3;
+}
+
+message ApplicationStatus {
+  string application_id = 1;
+  string instance_id = 2;
+  string status = 3;  // Running, Stopped, Starting, Error
+  double cpu_percent = 4;
+  double memory_mb = 5;
+  repeated PortMapping ports = 6;
+  string health_status = 7;  // Healthy, Unhealthy, Unknown
+  int64 start_time = 8;
+  string process_id = 9;
+}
+
+message SystemMetrics {
+  double cpu_percent = 1;
+  double memory_percent = 2;
+  double disk_percent = 3;
   int32 total_processes = 4;
+  int64 uptime_seconds = 5;
 }
 
-message Ack {
-  bool success = 1;
-  string message = 2;
+message ApplicationAssignment {
+  string application_id = 1;
+  string application_name = 2;
+  string executable_path = 3;
+  string arguments = 4;
+  string working_directory = 5;
+  int32 desired_instances = 6;
+  repeated PortRequirement ports = 7;
+  map<string, string> environment_variables = 8;
+  string health_check_url = 9;
+  int32 health_check_interval = 10;
 }
 
-message StartAppRequest {
-  string app_id = 1;
-  string agent_id = 2;
-  int32 instance_count = 3;
-  map<string, string> environment_vars = 4;
+message PortRequirement {
+  string name = 1;
+  int32 internal_port = 2;
+  string protocol = 3;  // TCP, UDP
+  bool required = 4;
 }
 
-message StartAppResponse {
-  bool success = 1;
-  string message = 2;
-  repeated string instance_ids = 3;
+message PortMapping {
+  string name = 1;
+  int32 internal_port = 2;
+  int32 external_port = 3;
+  string protocol = 4;
 }
 
-message StopAppRequest {
-  string app_id = 1;
-  string agent_id = 2;
-  string instance_id = 3; // empty for all instances
-  bool force = 4;
+message CommandRequest {
+  string command_id = 1;
+  string command_type = 2;  // SPAWN, KILL, RESTART, UPDATE
+  string application_id = 3;
+  string instance_id = 4;
+  string parameters = 5;  // JSON
+  int64 timestamp = 6;
 }
 
-message StopAppResponse {
-  bool success = 1;
-  string message = 2;
-  int32 stopped_count = 3;
+message CommandResponse {
+  string command_id = 1;
+  bool success = 2;
+  string message = 3;
+  string result = 4;  // JSON
+  int64 timestamp = 7;
 }
 
-message RestartAppRequest {
-  string app_id = 1;
-  string agent_id = 2;
-  string instance_id = 3; // empty for all instances
+// Command messages
+message SpawnCommand {
+  string application_id = 1;
+  string instance_id = 2;
+  string executable_path = 3;
+  string arguments = 4;
+  string working_directory = 5;
+  map<string, string> environment_variables = 6;
+  repeated PortMapping ports = 7;
+  string health_check_url = 8;
 }
 
-message RestartAppResponse {
-  bool success = 1;
-  string message = 2;
+message KillCommand {
+  string instance_id = 1;
+  bool force = 2;
+  int32 timeout_seconds = 3;
 }
 
-message StatusReport {
+message RestartCommand {
+  string instance_id = 1;
+  int32 timeout_seconds = 2;
+}
+
+message UpdateCommand {
+  string instance_id = 1;
+  map<string, string> environment_variables = 2;
+}
+
+// Status messages
+message Heartbeat {
   string agent_id = 1;
-  repeated AppInstanceStatus instances = 2;
-  double system_cpu_percent = 3;
-  double system_memory_mb = 4;
+  int64 timestamp = 2;
+}
+
+message ApplicationSpawned {
+  string instance_id = 1;
+  string application_id = 2;
+  int32 process_id = 3;
+  repeated PortMapping ports = 4;
+  int64 start_time = 5;
+}
+
+message ApplicationStopped {
+  string instance_id = 1;
+  string application_id = 2;
+  int32 exit_code = 3;
+  string reason = 4;
+  int64 stop_time = 5;
+}
+
+message ErrorReport {
+  string agent_id = 1;
+  string error_type = 2;
+  string error_message = 3;
+  string stack_trace = 4;
   int64 timestamp = 5;
 }
 
-message AppInstanceStatus {
-  string instance_id = 1;
-  string app_id = 2;
-  int32 status = 3; // 0=Unknown, 1=Running, 2=Stopped, 3=Error
-  double cpu_percent = 4;
-  double memory_mb = 5;
-  int32 process_id = 6;
-  int64 uptime_seconds = 7;
-}
-
-message AgentStatus {
+message HealthCheckRequest {
   string agent_id = 1;
-  bool is_healthy = 2;
-  double load_average = 3;
-}
-
-message Command {
-  CommandType type = 1;
-  string target_app_id = 2;
-  string target_instance_id = 3;
-  string target_agent_id = 4;
-  map<string, string> parameters = 5;
-  string command_id = 6;
-}
-
-enum CommandType {
-  START_INSTANCE = 0;
-  STOP_INSTANCE = 1;
-  RESTART_INSTANCE = 2;
-  SCALE_UP = 3;
-  SCALE_DOWN = 4;
-  HEALTH_CHECK = 5;
+  int64 timestamp = 2;
 }
