@@ -1,21 +1,10 @@
 ﻿using System.ComponentModel.DataAnnotations;
 using  Watchdog.Api.Data;
+using Watchdog.Api.Interface;
 
 namespace Watchdog.Api.Services;
 
-public interface IApplicationManager
-{
-    Task<IEnumerable<Application>> GetApplicationsAsync();
-    Task<Application?> GetApplicationAsync(string id);
-    Task<Application> CreateApplicationAsync(CreateApplicationRequest request);
-    Task<bool> UpdateApplicationAsync(string id, UpdateApplicationRequest request);
-    Task<bool> DeleteApplicationAsync(string id);
-    Task<IEnumerable<ApplicationInstance>> GetApplicationInstancesAsync(string applicationId);
-    Task<bool> UpdateInstanceStatusAsync(string instanceId, string status, double? cpuPercent = null, double? memoryMB = null);
-    Task<bool> StartApplicationAsync(string applicationId);
-    Task<bool> StopApplicationAsync(string applicationId);
-    Task<bool> RestartApplicationAsync(string applicationId);
-}
+
 
 public class ApplicationManager : IApplicationManager
 {
@@ -36,17 +25,17 @@ public class ApplicationManager : IApplicationManager
         _logger = logger;
     }
     
-    public async Task<IEnumerable<Application>> GetApplicationsAsync()
+    public async Task<IEnumerable<Application>> GetApplications()
     {
         return await _applicationRepository.GetAllAsync();
     }
     
-    public async Task<Application?> GetApplicationAsync(string id)
+    public async Task<Application?> GetApplication(string id)
     {
         return await _applicationRepository.GetByIdAsync(id);
     }
     
-    public async Task<Application> CreateApplicationAsync(CreateApplicationRequest request)
+    public async Task<Application> CreateApplication(CreateApplicationRequest request)
     {
         var application = new Application
         {
@@ -75,13 +64,13 @@ public class ApplicationManager : IApplicationManager
         // Auto-start if configured
         if (application.AutoStart && application.DesiredInstances > 0)
         {
-            _ = Task.Run(async () => await StartApplicationAsync(application.Id));
+            _ = Task.Run(async () => await StartApplication(application.Id));
         }
         
         return application;
     }
     
-    public async Task<bool> UpdateApplicationAsync(string id, UpdateApplicationRequest request)
+    public async Task<bool> UpdateApplication(string id, UpdateApplicationRequest request)
     {
         var existing = await _applicationRepository.GetByIdAsync(id);
         if (existing == null)
@@ -109,16 +98,16 @@ public class ApplicationManager : IApplicationManager
         // Trigger scaling if instance count changed
         if (existing.DesiredInstances != request.DesiredInstances)
         {
-            await TriggerScalingAsync(existing);
+            await TriggerScaling(existing);
         }
         
         return true;
     }
     
-    public async Task<bool> DeleteApplicationAsync(string id)
+    public async Task<bool> DeleteApplication(string id)
     {
         // First stop all instances
-        await StopApplicationAsync(id);
+        await StopApplication(id);
         
         // Then delete from database
         var result = await _applicationRepository.DeleteAsync(id);
@@ -132,18 +121,18 @@ public class ApplicationManager : IApplicationManager
         return false;
     }
     
-    public async Task<IEnumerable<ApplicationInstance>> GetApplicationInstancesAsync(string applicationId)
+    public async Task<IEnumerable<ApplicationInstance>> GetApplicationInstances(string applicationId)
     {
         return await _applicationRepository.GetApplicationInstancesAsync(applicationId);
     }
     
-    public async Task<bool> UpdateInstanceStatusAsync(string instanceId, string status, double? cpuPercent = null, double? memoryMB = null)
+    public async Task<bool> UpdateInstanceStatus(string instanceId, string status, double? cpuPercent = null, double? memoryMB = null)
     {
         var updated = await _applicationRepository.UpdateInstanceStatusAsync(instanceId, status, cpuPercent, memoryMB);
         return updated > 0;
     }
     
-    public async Task<bool> StartApplicationAsync(string applicationId)
+    public async Task<bool> StartApplication(string applicationId)
     {
         var application = await _applicationRepository.GetByIdAsync(applicationId);
         if (application == null)
@@ -153,7 +142,7 @@ public class ApplicationManager : IApplicationManager
             applicationId, application.DesiredInstances);
         
         // Distribute instances across available agents
-        var agents = await _agentManager.GetOnlineAgentsAsync();
+        var agents = await _agentManager.GetOnlineAgents();
         if (!agents.Any())
         {
             _logger.LogError("No online agents available to start application {ApplicationId}", applicationId);
@@ -171,7 +160,7 @@ public class ApplicationManager : IApplicationManager
                 var instanceId = $"{applicationId}-{agent.Id}-{Guid.NewGuid():N}";
                 
                 // Queue spawn command
-                await _commandService.QueueSpawnCommandAsync(
+                await _commandService.QueueSpawnCommand(
                     agent.Id,
                     application,
                     instanceId,
@@ -183,7 +172,7 @@ public class ApplicationManager : IApplicationManager
         return true;
     }
     
-    public async Task<bool> StopApplicationAsync(string applicationId)
+    public async Task<bool> StopApplication(string applicationId)
     {
         var instances = await _applicationRepository.GetApplicationInstancesAsync(applicationId);
         var runningInstances = instances.Where(i => i.Status == "Running");
@@ -194,7 +183,7 @@ public class ApplicationManager : IApplicationManager
         foreach (var instance in runningInstances)
         {
             // Queue kill command
-            await _commandService.QueueKillCommandAsync(
+            await _commandService.QueueKillCommand(
                 instance.AgentId,
                 instance.ApplicationId,
                 instance.InstanceId);
@@ -203,16 +192,16 @@ public class ApplicationManager : IApplicationManager
         return true;
     }
     
-    public async Task<bool> RestartApplicationAsync(string applicationId)
+    public async Task<bool> RestartApplication(string applicationId)
     {
         // Stop first
-        await StopApplicationAsync(applicationId);
+        await StopApplication(applicationId);
         
         // Wait a bit
         await Task.Delay(5000);
         
         // Start again
-        return await StartApplicationAsync(applicationId);
+        return await StartApplication(applicationId);
     }
     
     private Dictionary<int, int> CalculateInstanceDistribution(int totalInstances, int agentCount)
@@ -229,7 +218,7 @@ public class ApplicationManager : IApplicationManager
         return distribution;
     }
     
-    private async Task TriggerScalingAsync(Application application)
+    private async Task TriggerScaling(Application application)
     {
         var currentInstances = await _applicationRepository.GetApplicationInstancesAsync(application.Id);
         var runningInstances = currentInstances.Count(i => i.Status == "Running");
@@ -260,7 +249,7 @@ public class ApplicationManager : IApplicationManager
             
             foreach (var instance in instancesToRemove)
             {
-                await _commandService.QueueKillCommandAsync(
+                await _commandService.QueueKillCommand(
                     instance.AgentId,
                     instance.ApplicationId,
                     instance.InstanceId);

@@ -3,34 +3,10 @@ using System.Data;
 using System.Text.Json;
 using Watchdog.Api.Data;
 using Watchdog.Api.gRPC;
+using Watchdog.Api.Interface;
 using Watchdog.Api.Protos;
 
 namespace Watchdog.Api.Services;
-
-public interface ICommandService
-{
-    Task<CommandQueueItem> QueueSpawnCommandAsync(
-        string agentId, 
-        Application application, 
-        string instanceId, 
-        int instanceIndex);
-    
-    Task<CommandQueueItem> QueueKillCommandAsync(
-        string agentId, 
-        string applicationId, 
-        string instanceId);
-    
-    Task<CommandQueueItem> QueueRestartCommandAsync(
-        string agentId, 
-        string applicationId, 
-        string instanceId);
-    
-    Task<List<CommandQueueItem>> GetPendingCommandsAsync(string agentId);
-    Task<bool> MarkCommandAsSentAsync(string commandId);
-    Task<bool> MarkCommandAsExecutedAsync(string commandId, bool success, string? result = null, string? error = null);
-    Task<bool> QueueCommandAsync(CommandQueueItem command);
-    Task CleanupOldCommandsAsync();
-}
 
 public class CommandService : ICommandService
 {
@@ -51,7 +27,7 @@ public class CommandService : ICommandService
         _logger = logger;
     }
     
-    public async Task<CommandQueueItem> QueueSpawnCommandAsync(
+    public async Task<CommandQueueItem> QueueSpawnCommand(
         string agentId, 
         Application application, 
         string instanceId, 
@@ -63,7 +39,7 @@ public class CommandService : ICommandService
         List<PortAssignment> ports = new();
         if (application.PortRequirements != null && application.PortRequirements.Any())
         {
-            ports = await _networkManager.AllocatePortsAsync(agentId, application.PortRequirements.Count);
+            ports = await _networkManager.AllocatePorts(agentId, application.PortRequirements.Count);
         }
         
         var commandId = Guid.NewGuid().ToString();
@@ -96,19 +72,19 @@ public class CommandService : ICommandService
             CreatedAt = DateTime.UtcNow
         };
         
-        await QueueCommandAsync(command);
+        await QueueCommand(command);
         
         _logger.LogInformation(
             "Queued SPAWN command {CommandId} for application {AppId} instance {InstanceId} on agent {AgentId}",
             commandId, application.Id, instanceId, agentId);
         
         // Try to send immediately if agent is connected
-        await TrySendCommandImmediatelyAsync(command);
+        await TrySendCommandImmediately(command);
         
         return command;
     }
     
-    public async Task<CommandQueueItem> QueueKillCommandAsync(
+    public async Task<CommandQueueItem> QueueKillCommand(
         string agentId, 
         string applicationId, 
         string instanceId)
@@ -132,19 +108,19 @@ public class CommandService : ICommandService
             CreatedAt = DateTime.UtcNow
         };
         
-        await QueueCommandAsync(command);
+        await QueueCommand(command);
         
         _logger.LogInformation(
             "Queued KILL command {CommandId} for instance {InstanceId} on agent {AgentId}",
             commandId, instanceId, agentId);
         
         // Try to send immediately if agent is connected
-        await TrySendCommandImmediatelyAsync(command);
+        await TrySendCommandImmediately(command);
         
         return command;
     }
     
-    public async Task<CommandQueueItem> QueueRestartCommandAsync(
+    public async Task<CommandQueueItem> QueueRestartCommand(
         string agentId, 
         string applicationId, 
         string instanceId)
@@ -167,19 +143,19 @@ public class CommandService : ICommandService
             CreatedAt = DateTime.UtcNow
         };
         
-        await QueueCommandAsync(command);
+        await QueueCommand(command);
         
         _logger.LogInformation(
             "Queued RESTART command {CommandId} for instance {InstanceId} on agent {AgentId}",
             commandId, instanceId, agentId);
         
         // Try to send immediately if agent is connected
-        await TrySendCommandImmediatelyAsync(command);
+        await TrySendCommandImmediately(command);
         
         return command;
     }
     
-    public async Task<List<CommandQueueItem>> GetPendingCommandsAsync(string agentId)
+    public async Task<List<CommandQueueItem>> GetPendingCommands(string agentId)
     {
         using var connection = _connectionFactory.CreateConnection();
         
@@ -196,7 +172,7 @@ public class CommandService : ICommandService
         return (await connection.QueryAsync<CommandQueueItem>(sql, new { AgentId = agentId })).ToList();
     }
     
-    public async Task<bool> MarkCommandAsSentAsync(string commandId)
+    public async Task<bool> MarkCommandAsSent(string commandId)
     {
         using var connection = _connectionFactory.CreateConnection();
         
@@ -210,7 +186,7 @@ public class CommandService : ICommandService
         return result > 0;
     }
     
-    public async Task<bool> MarkCommandAsExecutedAsync(
+    public async Task<bool> MarkCommandAsExecuted(
         string commandId, 
         bool success, 
         string? result = null, 
@@ -237,13 +213,13 @@ public class CommandService : ICommandService
         if (rowsAffected > 0 && success && !string.IsNullOrEmpty(result))
         {
             // If spawn was successful, we might need to update the instance record
-            await UpdateInstanceAfterSuccessfulSpawnAsync(commandId, result);
+            await UpdateInstanceAfterSuccessfulSpawn(commandId, result);
         }
         
         return rowsAffected > 0;
     }
     
-    public async Task<bool> QueueCommandAsync(CommandQueueItem command)
+    public async Task<bool> QueueCommand(CommandQueueItem command)
     {
         using var connection = _connectionFactory.CreateConnection();
         
@@ -267,7 +243,7 @@ public class CommandService : ICommandService
         }
     }
     
-    public async Task CleanupOldCommandsAsync()
+    public async Task CleanupOldCommands()
     {
         using var connection = _connectionFactory.CreateConnection();
         
@@ -285,7 +261,7 @@ public class CommandService : ICommandService
         }
     }
     
-    private async Task TrySendCommandImmediatelyAsync(CommandQueueItem command)
+    private async Task TrySendCommandImmediately(CommandQueueItem command)
     {
         try
         {
@@ -301,11 +277,11 @@ public class CommandService : ICommandService
             };
             
             // Try to send via gRPC
-            var sent = await _agentGrpcService.SendCommandToAgentAsync(command.AgentId, grpcCommand);
+            var sent = await _agentGrpcService.SendCommandToAgent(command.AgentId, grpcCommand);
             
             if (sent)
             {
-                await MarkCommandAsSentAsync(command.CommandId);
+                await MarkCommandAsSent(command.CommandId);
                 _logger.LogDebug(
                     "Successfully sent command {CommandId} to agent {AgentId} immediately",
                     command.CommandId, command.AgentId);
@@ -319,7 +295,7 @@ public class CommandService : ICommandService
         }
     }
     
-    private async Task UpdateInstanceAfterSuccessfulSpawnAsync(string commandId, string result)
+    private async Task UpdateInstanceAfterSuccessfulSpawn(string commandId, string result)
     {
         try
         {
@@ -376,8 +352,8 @@ public class CommandService : ICommandService
 // Missing NetworkManager service
 public interface INetworkManager
 {
-    Task<List<PortAssignment>> AllocatePortsAsync(string agentId, int portCount);
-    Task<bool> ReleasePortsAsync(string agentId, List<int> ports);
+    Task<List<PortAssignment>> AllocatePorts(string agentId, int portCount);
+    Task<bool> ReleasePorts(string agentId, List<int> ports);
 }
 
 public class NetworkManager : INetworkManager
@@ -393,7 +369,7 @@ public class NetworkManager : INetworkManager
         _logger = logger;
     }
     
-    public async Task<List<PortAssignment>> AllocatePortsAsync(string agentId, int portCount)
+    public async Task<List<PortAssignment>> AllocatePorts(string agentId, int portCount)
     {
         using var connection = _connectionFactory.CreateConnection();
         
@@ -444,7 +420,7 @@ public class NetworkManager : INetworkManager
         }).ToList();
     }
     
-    public async Task<bool> ReleasePortsAsync(string agentId, List<int> ports)
+    public async Task<bool> ReleasePorts(string agentId, List<int> ports)
     {
         using var connection = _connectionFactory.CreateConnection();
         

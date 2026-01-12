@@ -4,6 +4,7 @@ using Dapper;
 using Grpc.Core;
 using System.Text.Json;
 using Watchdog.Api.Data;
+using Watchdog.Api.Interface;
 using Watchdog.Api.Protos;
 using Watchdog.Api.Services;
 

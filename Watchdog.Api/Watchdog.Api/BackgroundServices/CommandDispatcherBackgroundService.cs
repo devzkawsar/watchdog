@@ -1,4 +1,5 @@
 ﻿using Watchdog.Api.gRPC;
+using Watchdog.Api.Interface;
 using Watchdog.Api.Protos;
 using Watchdog.Api.Services;
 

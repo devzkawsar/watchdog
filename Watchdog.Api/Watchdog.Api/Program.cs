@@ -2,21 +2,19 @@ using Microsoft.OpenApi.Models;
 using Watchdog.Api.BackgroundServices;
 using Watchdog.Api.Data;
 using Watchdog.Api.gRPC;
+using Watchdog.Api.Interface;
 using Watchdog.Api.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
 builder.Services.AddControllers();
 
-// Add Swagger/OpenAPI
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new() { Title = "Watchdog Control Plane API", Version = "v1" });
 });
 
-// Database Configuration (Dapper)
 builder.Services.AddSingleton<IDbConnectionFactory>(sp =>
 {
     var config = sp.GetRequiredService<IConfiguration>();
@@ -27,7 +25,6 @@ builder.Services.AddSingleton<IDbConnectionFactory>(sp =>
     return new SqlServerConnectionFactory(connectionString);
 });
 
-// Register Repositories
 builder.Services.AddScoped<IApplicationRepository, ApplicationRepository>();
 
 // Register Services
@@ -42,21 +39,19 @@ builder.Services.AddSingleton<IAgentGrpcService, AgentGrpcService>();
 builder.Services.AddGrpc(options =>
 {
     options.EnableDetailedErrors = true;
-    options.MaxReceiveMessageSize = 10 * 1024 * 1024; // 10MB
-    options.MaxSendMessageSize = 10 * 1024 * 1024; // 10MB
+    options.MaxReceiveMessageSize = 10 * 1024 * 1024;
+    options.MaxSendMessageSize = 10 * 1024 * 1024;
 });
 
 // Background Services
-builder.Services.AddHostedService<ScalingBackgroundService>();
-builder.Services.AddHostedService<CommandDispatcherBackgroundService>();
-builder.Services.AddHostedService<GrpcConnectionCleanupBackgroundService>();
+// builder.Services.AddHostedService<ScalingBackgroundService>();
+// builder.Services.AddHostedService<CommandDispatcherBackgroundService>();
+// builder.Services.AddHostedService<GrpcConnectionCleanupBackgroundService>();
 
-// HTTP Client for agent communication
 builder.Services.AddHttpClient();
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();

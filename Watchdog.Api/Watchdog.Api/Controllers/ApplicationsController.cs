@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Watchdog.Api.Data;
+using Watchdog.Api.Interface;
 using Watchdog.Api.Services;
 
 namespace Watchdog.Api.Controllers;
@@ -24,7 +25,7 @@ public class ApplicationsController : ControllerBase
     {
         try
         {
-            var applications = await _applicationManager.GetApplicationsAsync();
+            var applications = await _applicationManager.GetApplications();
             return Ok(applications);
         }
         catch (Exception ex)
@@ -39,7 +40,7 @@ public class ApplicationsController : ControllerBase
     {
         try
         {
-            var application = await _applicationManager.GetApplicationAsync(id);
+            var application = await _applicationManager.GetApplication(id);
             
             if (application == null)
                 return NotFound(new { error = $"Application '{id}' not found" });
@@ -61,7 +62,7 @@ public class ApplicationsController : ControllerBase
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
             
-            var application = await _applicationManager.CreateApplicationAsync(request);
+            var application = await _applicationManager.CreateApplication(request);
             return CreatedAtAction(nameof(GetById), new { id = application.Id }, application);
         }
         catch (Exception ex)
@@ -79,7 +80,7 @@ public class ApplicationsController : ControllerBase
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
             
-            var success = await _applicationManager.UpdateApplicationAsync(id, request);
+            var success = await _applicationManager.UpdateApplication(id, request);
             
             if (!success)
                 return NotFound(new { error = $"Application '{id}' not found" });
@@ -99,7 +100,7 @@ public class ApplicationsController : ControllerBase
     {
         try
         {
-            var success = await _applicationManager.DeleteApplicationAsync(id);
+            var success = await _applicationManager.DeleteApplication(id);
             
             if (!success)
                 return NotFound(new { error = $"Application '{id}' not found" });
@@ -118,7 +119,7 @@ public class ApplicationsController : ControllerBase
     {
         try
         {
-            var instances = await _applicationManager.GetApplicationInstancesAsync(id);
+            var instances = await _applicationManager.GetApplicationInstances(id);
             return Ok(instances);
         }
         catch (Exception ex)
@@ -133,7 +134,7 @@ public class ApplicationsController : ControllerBase
     {
         try
         {
-            var success = await _applicationManager.StartApplicationAsync(id);
+            var success = await _applicationManager.StartApplication(id);
             
             if (!success)
                 return BadRequest(new { error = $"Failed to start application '{id}'" });
@@ -152,7 +153,7 @@ public class ApplicationsController : ControllerBase
     {
         try
         {
-            var success = await _applicationManager.StopApplicationAsync(id);
+            var success = await _applicationManager.StopApplication(id);
             
             if (!success)
                 return BadRequest(new { error = $"Failed to stop application '{id}'" });
@@ -171,7 +172,7 @@ public class ApplicationsController : ControllerBase
     {
         try
         {
-            var success = await _applicationManager.RestartApplicationAsync(id);
+            var success = await _applicationManager.RestartApplication(id);
             
             if (!success)
                 return BadRequest(new { error = $"Failed to restart application '{id}'" });

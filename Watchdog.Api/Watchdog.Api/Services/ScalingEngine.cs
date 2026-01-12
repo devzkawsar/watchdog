@@ -1,16 +1,9 @@
 ﻿using Dapper;
 using System.Data;
 using  Watchdog.Api.Data;
+using Watchdog.Api.Interface;
 
 namespace  Watchdog.Api.Services;
-
-public interface IScalingEngine
-{
-    Task CheckAndScaleApplicationsAsync();
-    Task ScaleApplicationAsync(string applicationId, int desiredInstances);
-    Task ScaleDownApplicationAsync(string applicationId, int instancesToRemove);
-    Task ScaleUpApplicationAsync(string applicationId, int instancesToAdd);
-}
 
 public class ScalingEngine : IScalingEngine
 {
@@ -34,17 +27,17 @@ public class ScalingEngine : IScalingEngine
         _logger = logger;
     }
     
-    public async Task CheckAndScaleApplicationsAsync()
+    public async Task CheckAndScaleApplications()
     {
         var applications = await _applicationRepository.GetAllAsync();
         
         foreach (var application in applications)
         {
-            await CheckApplicationScalingAsync(application);
+            await CheckApplicationScaling(application);
         }
     }
     
-    public async Task ScaleApplicationAsync(string applicationId, int desiredInstances)
+    public async Task ScaleApplication(string applicationId, int desiredInstances)
     {
         using var connection = _connectionFactory.CreateConnection();
         
@@ -68,16 +61,16 @@ public class ScalingEngine : IScalingEngine
         if (runningInstances < desiredInstances)
         {
             // Need to scale up
-            await ScaleUpApplicationAsync(applicationId, desiredInstances - runningInstances);
+            await ScaleUpApplication(applicationId, desiredInstances - runningInstances);
         }
         else if (runningInstances > desiredInstances)
         {
             // Need to scale down
-            await ScaleDownApplicationAsync(applicationId, runningInstances - desiredInstances);
+            await ScaleDownApplication(applicationId, runningInstances - desiredInstances);
         }
     }
     
-    public async Task ScaleUpApplicationAsync(string applicationId, int instancesToAdd)
+    public async Task ScaleUpApplication(string applicationId, int instancesToAdd)
     {
         var application = await _applicationRepository.GetByIdAsync(applicationId);
         if (application == null)
@@ -87,7 +80,7 @@ public class ScalingEngine : IScalingEngine
             applicationId, instancesToAdd);
         
         // Get online agents
-        var agents = await _agentManager.GetOnlineAgentsAsync();
+        var agents = await _agentManager.GetOnlineAgents();
         if (!agents.Any())
         {
             _logger.LogWarning("No online agents available for scaling up application {ApplicationId}", 
@@ -102,7 +95,7 @@ public class ScalingEngine : IScalingEngine
         {
             var instanceId = $"{applicationId}-{agent.Id}-{Guid.NewGuid():N}";
             
-            await _commandService.QueueSpawnCommandAsync(
+            await _commandService.QueueSpawnCommand(
                 agent.Id,
                 application,
                 instanceId,
@@ -110,7 +103,7 @@ public class ScalingEngine : IScalingEngine
         }
     }
     
-    public async Task ScaleDownApplicationAsync(string applicationId, int instancesToRemove)
+    public async Task ScaleDownApplication(string applicationId, int instancesToRemove)
     {
         _logger.LogInformation("Scaling down application {ApplicationId} by {InstancesToRemove} instances",
             applicationId, instancesToRemove);
@@ -124,14 +117,14 @@ public class ScalingEngine : IScalingEngine
         
         foreach (var instance in runningInstances)
         {
-            await _commandService.QueueKillCommandAsync(
+            await _commandService.QueueKillCommand(
                 instance.AgentId,
                 instance.ApplicationId,
                 instance.InstanceId);
         }
     }
     
-    private async Task CheckApplicationScalingAsync(Application application)
+    private async Task CheckApplicationScaling(Application application)
     {
         // Get current instances
         var instances = await _applicationRepository.GetApplicationInstancesAsync(application.Id);
@@ -144,7 +137,7 @@ public class ScalingEngine : IScalingEngine
                 "Application {ApplicationId} has {Running}/{Min} instances. Scaling up...",
                 application.Id, runningInstances, application.MinInstances);
             
-            await ScaleUpApplicationAsync(application.Id, application.MinInstances - runningInstances);
+            await ScaleUpApplication(application.Id, application.MinInstances - runningInstances);
         }
         
         // Check max instances
@@ -154,7 +147,7 @@ public class ScalingEngine : IScalingEngine
                 "Application {ApplicationId} has {Running}/{Max} instances. Scaling down...",
                 application.Id, runningInstances, application.MaxInstances);
             
-            await ScaleDownApplicationAsync(application.Id, runningInstances - application.MaxInstances);
+            await ScaleDownApplication(application.Id, runningInstances - application.MaxInstances);
         }
         
         // Check desired instances
@@ -164,7 +157,7 @@ public class ScalingEngine : IScalingEngine
                 "Application {ApplicationId} has {Running}/{Desired} instances. Adjusting...",
                 application.Id, runningInstances, application.DesiredInstances);
             
-            await ScaleApplicationAsync(application.Id, application.DesiredInstances);
+            await ScaleApplication(application.Id, application.DesiredInstances);
         }
     }
 }

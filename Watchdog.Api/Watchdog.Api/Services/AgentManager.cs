@@ -2,19 +2,10 @@
 using System.Data;
 using System.Text.Json;
 using Watchdog.Api.Data;
+using Watchdog.Api.Interface;
 
 namespace Watchdog.Api.Services;
 
-public interface IAgentManager
-{
-    Task<IEnumerable<Agent>> GetAgentsAsync();
-    Task<Agent?> GetAgentAsync(string id);
-    Task<Agent> RegisterAgentAsync(AgentRegistration registration);
-    Task<bool> UpdateAgentHeartbeatAsync(string agentId);
-    Task<bool> AssignApplicationToAgentAsync(string agentId, string applicationId);
-    Task<IEnumerable<Agent>> GetOnlineAgentsAsync();
-    Task<IEnumerable<Application>> GetAgentApplicationsAsync(string agentId);
-}
 
 public class AgentManager : IAgentManager
 {
@@ -29,7 +20,11 @@ public class AgentManager : IAgentManager
         _logger = logger;
     }
     
-    public async Task<IEnumerable<Agent>> GetAgentsAsync()
+    /// <summary>
+    /// Retrieves a list of agents.
+    /// </summary>
+    /// <returns>A list of agents.</returns>
+    public async Task<IEnumerable<Agent>> GetAgents()
     {
         using var connection = _connectionFactory.CreateConnection();
         
@@ -44,7 +39,12 @@ public class AgentManager : IAgentManager
         return await connection.QueryAsync<Agent>(sql);
     }
     
-    public async Task<Agent?> GetAgentAsync(string id)
+    /// <summary>
+    /// Retrieves an agent by ID.
+    /// </summary>
+    /// <param name="id">The ID of the agent.</param>
+    /// <returns>The agent, or null if not found.</returns>
+    public async Task<Agent?> GetAgent(string id)
     {
         using var connection = _connectionFactory.CreateConnection();
         
@@ -59,7 +59,12 @@ public class AgentManager : IAgentManager
         return await connection.QueryFirstOrDefaultAsync<Agent>(sql, new { Id = id });
     }
     
-    public async Task<Agent> RegisterAgentAsync(AgentRegistration registration)
+    /// <summary>
+    /// Registers an agent.
+    /// </summary>
+    /// <param name="registration">The registration details.</param>
+    /// <returns>The registered agent.</returns>
+    public async Task<Agent> RegisterAgent(AgentRegistration registration)
     {
         using var connection = _connectionFactory.CreateConnection();
         
@@ -104,7 +109,12 @@ public class AgentManager : IAgentManager
         return agent;
     }
     
-    public async Task<bool> UpdateAgentHeartbeatAsync(string agentId)
+    /// <summary>
+    /// Updates an agent's heartbeat.
+    /// </summary>
+    /// <param name="agentId">The ID of the agent.</param>
+    /// <returns>True if the agent was updated, false otherwise.</returns>
+    public async Task<bool> UpdateAgentHeartbeat(string agentId)
     {
         using var connection = _connectionFactory.CreateConnection();
         
@@ -119,14 +129,20 @@ public class AgentManager : IAgentManager
         if (result > 0)
         {
             // Mark offline agents
-            await MarkOfflineAgentsAsync(connection);
+            await MarkOfflineAgents(connection);
             return true;
         }
         
         return false;
     }
     
-    public async Task<bool> AssignApplicationToAgentAsync(string agentId, string applicationId)
+    /// <summary>
+    /// Assigns an application to an agent.
+    /// </summary>
+    /// <param name="agentId">The ID of the agent.</param>
+    /// <param name="applicationId">The ID of the application.</param>
+    /// <returns>True if the application was assigned, false otherwise.</returns>
+    public async Task<bool> AssignApplicationToAgent(string agentId, string applicationId)
     {
         using var connection = _connectionFactory.CreateConnection();
         
@@ -154,7 +170,11 @@ public class AgentManager : IAgentManager
         return false;
     }
     
-    public async Task<IEnumerable<Agent>> GetOnlineAgentsAsync()
+    /// <summary>
+    /// Retrieves a list of online agents.
+    /// </summary>
+    /// <returns>A list of online agents.</returns>
+    public async Task<IEnumerable<Agent>> GetOnlineAgents()
     {
         using var connection = _connectionFactory.CreateConnection();
         
@@ -171,7 +191,12 @@ public class AgentManager : IAgentManager
         return await connection.QueryAsync<Agent>(sql);
     }
     
-    public async Task<IEnumerable<Application>> GetAgentApplicationsAsync(string agentId)
+    /// <summary>
+    /// Retrieves a list of applications assigned to an agent.
+    /// </summary>
+    /// <param name="agentId">The ID of the agent.</param>
+    /// <returns>A list of applications assigned to the agent.</returns>
+    public async Task<IEnumerable<Application>> GetAgentApplications(string agentId)
     {
         using var connection = _connectionFactory.CreateConnection();
         
@@ -203,7 +228,11 @@ public class AgentManager : IAgentManager
         return applications;
     }
     
-    private async Task MarkOfflineAgentsAsync(IDbConnection connection)
+    /// <summary>
+    /// Marks agents as offline if their heartbeat is older than 5 minutes.
+    /// </summary>
+    /// <param name="connection">The database connection.</param>
+    private async Task MarkOfflineAgents(IDbConnection connection)
     {
         const string sql = @"
             UPDATE Agents 

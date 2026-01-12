@@ -1,4 +1,5 @@
-﻿using Watchdog.Api.Services;
+﻿using Watchdog.Api.Interface;
+using Watchdog.Api.Services;
 
 namespace Watchdog.Api.BackgroundServices;
 

@@ -1,6 +1,10 @@
 namespace Watchdog.Api.Interface;
 
-public class IScalingEngine
+
+public interface IScalingEngine
 {
-    
+	Task CheckAndScaleApplications();
+	Task ScaleApplication(string applicationId, int desiredInstances);
+	Task ScaleDownApplication(string applicationId, int instancesToRemove);
+	Task ScaleUpApplication(string applicationId, int instancesToAdd);
 }

@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Watchdog.Api.Data;
+using Watchdog.Api.Interface;
 using Watchdog.Api.Services;
 
 namespace Watchdog.WebApi.Controllers;
@@ -24,7 +25,7 @@ public class AgentsController : ControllerBase
     {
         try
         {
-            var agents = await _agentManager.GetAgentsAsync();
+            var agents = await _agentManager.GetAgents();
             return Ok(agents);
         }
         catch (Exception ex)
@@ -39,7 +40,7 @@ public class AgentsController : ControllerBase
     {
         try
         {
-            var agent = await _agentManager.GetAgentAsync(id);
+            var agent = await _agentManager.GetAgent(id);
             
             if (agent == null)
                 return NotFound(new { error = $"Agent '{id}' not found" });
@@ -58,7 +59,7 @@ public class AgentsController : ControllerBase
     {
         try
         {
-            var success = await _agentManager.UpdateAgentHeartbeatAsync(id);
+            var success = await _agentManager.UpdateAgentHeartbeat(id);
             
             if (!success)
                 return NotFound(new { error = $"Agent '{id}' not found" });
@@ -77,7 +78,7 @@ public class AgentsController : ControllerBase
     {
         try
         {
-            var success = await _agentManager.AssignApplicationToAgentAsync(agentId, applicationId);
+            var success = await _agentManager.AssignApplicationToAgent(agentId, applicationId);
             
             if (!success)
                 return BadRequest(new { error = "Failed to assign application to agent" });
@@ -97,7 +98,7 @@ public class AgentsController : ControllerBase
     {
         try
         {
-            var applications = await _agentManager.GetAgentApplicationsAsync(id);
+            var applications = await _agentManager.GetAgentApplications(id);
             return Ok(applications);
         }
         catch (Exception ex)
