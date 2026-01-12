@@ -1,3 +1,5 @@
+using IConfigurationManager = Watchdog.Agent.Interface.IConfigurationManager;
+
 namespace Watchdog.Agent.Services;
 
 internal interface IConfigurationManagerInternal : IConfigurationManager

@@ -1,0 +1,59 @@
+# Rider
+.idea/
+*.sln.iml
+
+# User-specific files
+*.user
+*.userosscache
+*.suo
+*.sln.docstates
+
+# Build results
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+x64/
+x86/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+
+# Visual Studio Code workspace settings
+.vscode/
+
+# NuGet packages
+*.nupkg
+# The packages folder can be ignored because of restore
+**/[Pp]ackages/*
+# Except build/ directory in case of NuGet.exe
+!**/[Pp]ackages/build/
+# Uncomment if you have nuget.exe locally
+# nuget.exe
+
+# Microsoft Azure Web App publish settings
+*.PublishSettings
+*.pubxml
+*.pubxml.user
+
+# Others
+*.dbmdl
+*.bak
+*.log
+*.pdb
+*.cache
+*.zip
+*.tmp
+*.DS_Store
+
+# Resharper / Rider caches
+_ReSharper*/
+*.DotSettings.user
+
+# Rider project settings
+
+# dotCover
+*.dotCover

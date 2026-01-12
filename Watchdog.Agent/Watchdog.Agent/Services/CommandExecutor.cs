@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using Watchdog.Agent.Interface;
 using Watchdog.Agent.Protos;
 
 namespace Watchdog.Agent.Services;
@@ -16,7 +17,7 @@ public class CommandExecutor : ICommandExecutorInternal
         _logger = logger;
     }
 
-    public Task ExecuteCommandAsync(CommandRequest command, CancellationToken cancellationToken)
+    public Task ExecuteCommand(CommandRequest command, CancellationToken cancellationToken)
     {
         _logger.LogInformation(
             "Received pending command {CommandId} ({CommandType}) for app {AppId} instance {InstanceId}",

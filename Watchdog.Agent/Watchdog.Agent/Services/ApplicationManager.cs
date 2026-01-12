@@ -1,10 +1,9 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text.Json;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Watchdog.Agent.Configuration;
+using Watchdog.Agent.Interface;
 using Watchdog.Agent.Protos;
 
 namespace Watchdog.Agent.Services
@@ -36,7 +35,7 @@ namespace Watchdog.Agent.Services
             _monitoringSettings = monitoringSettings;
         }
         
-        public async Task InitializeAsync()
+        public async Task Initialize()
         {
             try
             {
@@ -48,7 +47,7 @@ namespace Watchdog.Agent.Services
                 Directory.CreateDirectory(_agentSettings.Value.DataDirectory);
                 
                 // Load saved state if exists
-                await LoadSavedStateAsync();
+                await LoadSavedState();
                 
                 _logger.LogInformation("ApplicationManager initialized");
             }
@@ -59,18 +58,18 @@ namespace Watchdog.Agent.Services
             }
         }
         
-        public Task<List<Watchdog.Agent.Models.ApplicationConfig>> GetAssignedApplicationsAsync()
+        public Task<List<Watchdog.Agent.Models.ApplicationConfig>> GetAssignedApplications()
         {
             return Task.FromResult(_applications.Values.ToList());
         }
         
-        public Task<Watchdog.Agent.Models.ApplicationConfig?> GetApplicationConfigAsync(string applicationId)
+        public Task<Watchdog.Agent.Models.ApplicationConfig?> GetApplicationConfig(string applicationId)
         {
             _applications.TryGetValue(applicationId, out var config);
             return Task.FromResult(config);
         }
         
-        public Task<bool> ValidateApplicationConfigAsync(Watchdog.Agent.Models.ApplicationConfig config)
+        public Task<bool> ValidateApplicationConfig(Watchdog.Agent.Models.ApplicationConfig config)
         {
             try
             {
@@ -124,12 +123,12 @@ namespace Watchdog.Agent.Services
             }
         }
         
-        public async Task ReportToOrchestratorAsync()
+        public async Task ReportToOrchestrator()
         {
             try
             {
-                var instanceStatuses = await GetInstanceStatusesAsync();
-                var systemMetrics = await GetSystemMetricsAsync();
+                var instanceStatuses = await GetInstanceStatuses();
+                var systemMetrics = await GetSystemMetrics();
                 
                 var statusRequest = new StatusReportRequest
                 {
@@ -141,7 +140,7 @@ namespace Watchdog.Agent.Services
                 statusRequest.Instances.AddRange(instanceStatuses);
                 
                 var grpcClient = _serviceProvider.GetRequiredService<IGrpcClient>();
-                await grpcClient.ReportStatusAsync(statusRequest);
+                await grpcClient.ReportStatus(statusRequest);
             }
             catch (Exception ex)
             {
@@ -149,7 +148,7 @@ namespace Watchdog.Agent.Services
             }
         }
         
-        public async Task<Watchdog.Agent.Models.ManagedApplication> CreateApplicationInstanceAsync(SpawnCommand command)
+        public async Task<Watchdog.Agent.Models.ManagedApplication> CreateApplicationInstance(SpawnCommand command)
         {
             var instance = new Watchdog.Agent.Models.ManagedApplication
             {
@@ -164,7 +163,7 @@ namespace Watchdog.Agent.Services
             _instances[command.InstanceId] = instance;
             
             // Save state
-            await SaveStateAsync();
+            await SaveState();
             
             _logger.LogInformation(
                 "Created application instance {InstanceId} for application {AppId}",
@@ -173,18 +172,18 @@ namespace Watchdog.Agent.Services
             return instance;
         }
         
-        public Task<Watchdog.Agent.Models.ManagedApplication?> GetApplicationInstanceAsync(string instanceId)
+        public Task<Watchdog.Agent.Models.ManagedApplication?> GetApplicationInstance(string instanceId)
         {
             _instances.TryGetValue(instanceId, out var instance);
             return Task.FromResult(instance);
         }
         
-        public Task<List<Watchdog.Agent.Models.ManagedApplication>> GetAllInstancesAsync()
+        public Task<List<Watchdog.Agent.Models.ManagedApplication>> GetAllInstances()
         {
             return Task.FromResult(_instances.Values.ToList());
         }
         
-        public async Task UpdateInstanceStatusAsync(
+        public async Task UpdateInstanceStatus(
             string instanceId, 
             Watchdog.Agent.Models.ApplicationStatus status,
             int? processId = null,
@@ -219,7 +218,7 @@ namespace Watchdog.Agent.Services
                 }
                 
                 // Save state
-                await SaveStateAsync();
+                await SaveState();
                 
                 _logger.LogDebug(
                     "Updated instance {InstanceId} status to {Status}",
@@ -227,12 +226,12 @@ namespace Watchdog.Agent.Services
             }
         }
         
-        public async Task RemoveInstanceAsync(string instanceId)
+        public async Task RemoveInstance(string instanceId)
         {
             if (_instances.TryRemove(instanceId, out var instance))
             {
                 // Save state
-                await SaveStateAsync();
+                await SaveState();
                 
                 _logger.LogInformation(
                     "Removed instance {InstanceId} from tracking",
@@ -240,7 +239,7 @@ namespace Watchdog.Agent.Services
             }
         }
         
-        public async Task<List<ApplicationInstanceStatus>> GetInstanceStatusesAsync()
+        public async Task<List<ApplicationInstanceStatus>> GetInstanceStatuses()
         {
             var statuses = new List<ApplicationInstanceStatus>();
             
@@ -259,7 +258,7 @@ namespace Watchdog.Agent.Services
                             : 0,
                         UptimeSeconds = instance.StartedAt.HasValue ? 
                             (long)(DateTimeOffset.UtcNow - new DateTimeOffset(instance.StartedAt.Value)).TotalSeconds : 0,
-                        HealthStatus = await GetInstanceHealthStatusAsync(instance)
+                        HealthStatus = await GetInstanceHealthStatus(instance)
                     };
                     
                     // Add ports if available
@@ -286,7 +285,7 @@ namespace Watchdog.Agent.Services
             return statuses;
         }
         
-        public async Task UpdateApplicationsFromControlPlaneAsync(List<ApplicationAssignment> assignments)
+        public async Task UpdateApplicationsFromControlPlane(List<ApplicationAssignment> assignments)
         {
             lock (_syncLock)
             {
@@ -334,10 +333,10 @@ namespace Watchdog.Agent.Services
             }
             
             // Save state
-            await SaveStateAsync();
+            await SaveState();
         }
         
-        public Task<bool> ShouldRestartInstanceAsync(Watchdog.Agent.Models.ManagedApplication instance)
+        public Task<bool> ShouldRestartInstance(Watchdog.Agent.Models.ManagedApplication instance)
         {
             if (instance.Status != Watchdog.Agent.Models.ApplicationStatus.Error && 
                 instance.Status != Watchdog.Agent.Models.ApplicationStatus.Stopped)
@@ -362,7 +361,7 @@ namespace Watchdog.Agent.Services
             return Task.FromResult(true);
         }
         
-        public async Task IncrementRestartCountAsync(string instanceId)
+        public async Task IncrementRestartCount(string instanceId)
         {
             if (_instances.TryGetValue(instanceId, out var instance))
             {
@@ -373,11 +372,11 @@ namespace Watchdog.Agent.Services
                 }
                 
                 // Save state
-                await SaveStateAsync();
+                await SaveState();
             }
         }
         
-        private Task<string> GetInstanceHealthStatusAsync(Watchdog.Agent.Models.ManagedApplication instance)
+        private Task<string> GetInstanceHealthStatus(Watchdog.Agent.Models.ManagedApplication instance)
         {
             if (instance.Status != Watchdog.Agent.Models.ApplicationStatus.Running)
                 return Task.FromResult("Stopped");
@@ -413,7 +412,7 @@ namespace Watchdog.Agent.Services
             }
         }
         
-        private Task<SystemMetrics> GetSystemMetricsAsync()
+        private Task<SystemMetrics> GetSystemMetrics()
         {
             // This would be implemented by a separate metrics collector
             return Task.FromResult(new SystemMetrics
@@ -423,7 +422,7 @@ namespace Watchdog.Agent.Services
             });
         }
         
-        private async Task LoadSavedStateAsync()
+        private async Task LoadSavedState()
         {
             try
             {
@@ -459,7 +458,7 @@ namespace Watchdog.Agent.Services
             }
         }
         
-        private async Task SaveStateAsync()
+        private async Task SaveState()
         {
             try
             {

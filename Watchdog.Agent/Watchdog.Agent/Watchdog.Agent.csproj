@@ -21,10 +21,6 @@
     </ItemGroup>
 
     <ItemGroup>
-      <Folder Include="Models\" />
-    </ItemGroup>
-
-    <ItemGroup>
       <Protobuf Include="Protos\monitoring.proto" GrpcServices="Client" />
     </ItemGroup>
 </Project>

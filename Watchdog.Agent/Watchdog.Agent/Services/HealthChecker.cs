@@ -1,4 +1,5 @@
 using System.Net.Http;
+using Watchdog.Agent.Interface;
 
 namespace Watchdog.Agent.Services;
 
@@ -10,7 +11,7 @@ public class HealthChecker : IHealthCheckerInternal
 {
     private static readonly HttpClient HttpClient = new();
 
-    public async Task<bool> PerformHttpHealthCheckAsync(string url, int timeoutSeconds)
+    public async Task<bool> PerformHttpHealthCheck(string url, int timeoutSeconds)
     {
         try
         {

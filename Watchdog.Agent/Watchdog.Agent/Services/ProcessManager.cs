@@ -5,6 +5,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Watchdog.Agent.Configuration;
+using Watchdog.Agent.Interface;
 using Watchdog.Agent.Models;
 using Watchdog.Agent.Protos;
 
@@ -39,7 +40,7 @@ public class ProcessManager : IProcessManagerInternal
         _agentSettings = agentSettings;
     }
     
-    public async Task<ProcessSpawnResult> SpawnProcessAsync(SpawnCommand command, List<PortMapping> ports)
+    public async Task<ProcessSpawnResult> SpawnProcess(SpawnCommand command, List<PortMapping> ports)
     {
         var stopwatch = Stopwatch.StartNew();
         
@@ -199,7 +200,7 @@ public class ProcessManager : IProcessManagerInternal
             _processIdToInstanceId[process.Id] = command.InstanceId;
             
             // Start background monitoring
-            _ = Task.Run(() => MonitorProcessAsync(managedProcess));
+            _ = Task.Run(() => MonitorProcess(managedProcess));
             
             stopwatch.Stop();
             
@@ -221,14 +222,14 @@ public class ProcessManager : IProcessManagerInternal
             if (ports.Any())
             {
                 var portNumbers = ports.Select(p => p.ExternalPort).ToList();
-                await _networkManager.ReleasePortsAsync(portNumbers);
+                await _networkManager.ReleasePorts(portNumbers);
             }
             
             return ProcessSpawnResult.Failed(ex.Message);
         }
     }
     
-    public async Task<bool> KillProcessAsync(string instanceId, bool force = false, int timeoutSeconds = 30)
+    public async Task<bool> KillProcess(string instanceId, bool force = false, int timeoutSeconds = 30)
     {
         try
         {
@@ -243,7 +244,7 @@ public class ProcessManager : IProcessManagerInternal
                 managedProcess.Process.Id, instanceId, force);
             
             // Update application manager
-            await _applicationManager.UpdateInstanceStatusAsync(instanceId, ApplicationStatus.Stopping);
+            await _applicationManager.UpdateInstanceStatus(instanceId, ApplicationStatus.Stopping);
             
             var process = managedProcess.Process;
             
@@ -304,7 +305,7 @@ public class ProcessManager : IProcessManagerInternal
             }
             
             // Clean up resources
-            await CleanupProcessResourcesAsync(managedProcess);
+            await CleanupProcessResources(managedProcess);
             
             _logger.LogInformation(
                 "Successfully killed process for instance {InstanceId}", instanceId);
@@ -318,7 +319,7 @@ public class ProcessManager : IProcessManagerInternal
         }
     }
     
-    public async Task<bool> RestartProcessAsync(string instanceId, int timeoutSeconds = 30)
+    public async Task<bool> RestartProcess(string instanceId, int timeoutSeconds = 30)
     {
         try
         {
@@ -332,7 +333,7 @@ public class ProcessManager : IProcessManagerInternal
             }
             
             // Kill the process
-            await KillProcessAsync(instanceId, false, timeoutSeconds);
+            await KillProcess(instanceId, false, timeoutSeconds);
             
             // Wait a bit
             await Task.Delay(2000);
@@ -348,7 +349,7 @@ public class ProcessManager : IProcessManagerInternal
             }
             
             // Spawn new process
-            var result = await SpawnProcessAsync(command, ports);
+            var result = await SpawnProcess(command, ports);
             
             return result.Success;
         }
@@ -359,21 +360,21 @@ public class ProcessManager : IProcessManagerInternal
         }
     }
     
-    public async Task<ProcessInfo?> GetProcessInfoAsync(string instanceId)
+    public async Task<ProcessInfo?> GetProcessInfo(string instanceId)
     {
         if (!_managedProcesses.TryGetValue(instanceId, out var managedProcess))
             return null;
         
-        return await BuildProcessInfoAsync(managedProcess);
+        return await BuildProcessInfo(managedProcess);
     }
     
-    public async Task<List<ProcessInfo>> GetAllProcessesAsync()
+    public async Task<List<ProcessInfo>> GetAllProcesses()
     {
         var processInfos = new List<ProcessInfo>();
         
         foreach (var managedProcess in _managedProcesses.Values)
         {
-            var info = await BuildProcessInfoAsync(managedProcess);
+            var info = await BuildProcessInfo(managedProcess);
             if (info != null)
                 processInfos.Add(info);
         }
@@ -381,7 +382,7 @@ public class ProcessManager : IProcessManagerInternal
         return processInfos;
     }
     
-    public Task<bool> IsProcessRunningAsync(string instanceId)
+    public Task<bool> IsProcessRunning(string instanceId)
     {
         if (!_managedProcesses.TryGetValue(instanceId, out var managedProcess))
             return Task.FromResult(false);
@@ -396,7 +397,7 @@ public class ProcessManager : IProcessManagerInternal
         }
     }
     
-    public async Task<ProcessMetrics?> GetProcessMetricsAsync(string instanceId)
+    public async Task<ProcessMetrics?> GetProcessMetrics(string instanceId)
     {
         if (!_managedProcesses.TryGetValue(instanceId, out var managedProcess))
             return null;
@@ -410,12 +411,12 @@ public class ProcessManager : IProcessManagerInternal
             
             var metrics = new ProcessMetrics
             {
-                CpuPercent = await GetCpuUsageAsync(process),
+                CpuPercent = await GetCpuUsage(process),
                 MemoryMB = process.WorkingSet64 / 1024.0 / 1024.0,
                 ThreadCount = process.Threads.Count,
                 HandleCount = process.HandleCount,
-                IoReadBytes = await GetIoReadBytesAsync(process),
-                IoWriteBytes = await GetIoWriteBytesAsync(process),
+                IoReadBytes = await GetIoReadBytes(process),
+                IoWriteBytes = await GetIoWriteBytes(process),
                 CollectedAt = DateTime.UtcNow
             };
             
@@ -519,7 +520,7 @@ public class ProcessManager : IProcessManagerInternal
         return Directory.GetCurrentDirectory();
     }
     
-    private async Task MonitorProcessAsync(ManagedProcess managedProcess)
+    private async Task MonitorProcess(ManagedProcess managedProcess)
     {
         try
         {
@@ -534,15 +535,15 @@ public class ProcessManager : IProcessManagerInternal
             
             // Update application manager
             var status = exitCode == 0 ? ApplicationStatus.Stopped : ApplicationStatus.Error;
-            await _applicationManager.UpdateInstanceStatusAsync(
+            await _applicationManager.UpdateInstanceStatus(
                 managedProcess.InstanceId,
                 status);
             
             // Clean up resources
-            await CleanupProcessResourcesAsync(managedProcess);
+            await CleanupProcessResources(managedProcess);
             
             // Log exit
-            await LogProcessExitAsync(managedProcess, exitCode);
+            await LogProcessExit(managedProcess, exitCode);
             
         }
         catch (Exception ex)
@@ -550,11 +551,11 @@ public class ProcessManager : IProcessManagerInternal
             _logger.LogError(ex, "Error monitoring process {ProcessId}", managedProcess.Process.Id);
             
             // Clean up resources
-            await CleanupProcessResourcesAsync(managedProcess);
+            await CleanupProcessResources(managedProcess);
         }
     }
     
-    private async Task CleanupProcessResourcesAsync(ManagedProcess managedProcess)
+    private async Task CleanupProcessResources(ManagedProcess managedProcess)
     {
         try
         {
@@ -566,7 +567,7 @@ public class ProcessManager : IProcessManagerInternal
             if (managedProcess.Ports.Any())
             {
                 var portNumbers = managedProcess.Ports.Select(p => p.ExternalPort).ToList();
-                await _networkManager.ReleasePortsAsync(portNumbers);
+                await _networkManager.ReleasePorts(portNumbers);
             }
             
             // Dispose process
@@ -597,12 +598,12 @@ public class ProcessManager : IProcessManagerInternal
         }
     }
     
-    private async Task<ProcessInfo> BuildProcessInfoAsync(ManagedProcess managedProcess)
+    private async Task<ProcessInfo> BuildProcessInfo(ManagedProcess managedProcess)
     {
         try
         {
             var process = managedProcess.Process;
-            var metrics = await GetProcessMetricsAsync(managedProcess.InstanceId);
+            var metrics = await GetProcessMetrics(managedProcess.InstanceId);
             
             var info = new ProcessInfo
             {
@@ -642,7 +643,7 @@ public class ProcessManager : IProcessManagerInternal
         }
     }
     
-    private async Task<double> GetCpuUsageAsync(Process process)
+    private async Task<double> GetCpuUsage(Process process)
     {
         try
         {
@@ -668,7 +669,7 @@ public class ProcessManager : IProcessManagerInternal
         }
     }
     
-    private Task<long> GetIoReadBytesAsync(Process process)
+    private Task<long> GetIoReadBytes(Process process)
     {
         try
         {
@@ -682,7 +683,7 @@ public class ProcessManager : IProcessManagerInternal
         }
     }
     
-    private Task<long> GetIoWriteBytesAsync(Process process)
+    private Task<long> GetIoWriteBytes(Process process)
     {
         try
         {
@@ -712,7 +713,7 @@ public class ProcessManager : IProcessManagerInternal
         }
     }
     
-    private async Task LogProcessExitAsync(ManagedProcess managedProcess, int exitCode)
+    private async Task LogProcessExit(ManagedProcess managedProcess, int exitCode)
     {
         try
         {

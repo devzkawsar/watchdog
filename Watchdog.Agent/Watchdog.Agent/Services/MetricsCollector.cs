@@ -1,3 +1,5 @@
+using Watchdog.Agent.Interface;
+
 namespace Watchdog.Agent.Services;
 
 internal interface IMetricsCollectorInternal : IMetricsCollector

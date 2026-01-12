@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Watchdog.Agent.Configuration;
+using Watchdog.Agent.Interface;
 using Watchdog.Agent.Models;
 using Watchdog.Agent.Protos;
 
@@ -49,7 +50,7 @@ public class MonitorService : IMonitorServiceInternal
         _monitoringSettings = monitoringSettings;
     }
     
-    public Task StartAsync(CancellationToken cancellationToken)
+    public Task Start(CancellationToken cancellationToken)
     {
         lock (_lock)
         {
@@ -60,21 +61,21 @@ public class MonitorService : IMonitorServiceInternal
             
             // Start metrics collection timer (every 10 seconds)
             _metricsTimer = new Timer(
-                async _ => await CollectAndReportMetricsAsync(),
+                async _ => await CollectAndReportMetrics(),
                 null,
                 TimeSpan.Zero,
                 TimeSpan.FromMilliseconds(_monitoringSettings.Value.MetricsCollectionIntervalMs));
             
             // Start health check timer (every 30 seconds)
             _healthCheckTimer = new Timer(
-                async _ => await PerformHealthChecksAsync(),
+                async _ => await PerformHealthChecks(),
                 null,
                 TimeSpan.FromSeconds(30),
                 TimeSpan.FromMilliseconds(_monitoringSettings.Value.HealthCheckIntervalMs));
             
             // Start failure detection timer (every 60 seconds)
             _failureDetectionTimer = new Timer(
-                async _ => await DetectAndHandleFailuresAsync(),
+                async _ => await DetectAndHandleFailures(),
                 null,
                 TimeSpan.FromSeconds(60),
                 TimeSpan.FromMilliseconds(_monitoringSettings.Value.FailureDetectionIntervalMs));
@@ -86,7 +87,7 @@ public class MonitorService : IMonitorServiceInternal
         return Task.CompletedTask;
     }
     
-    public Task StopAsync()
+    public Task Stop()
     {
         lock (_lock)
         {
@@ -110,19 +111,19 @@ public class MonitorService : IMonitorServiceInternal
         return Task.CompletedTask;
     }
     
-    public async Task<List<ProcessMetrics>> CollectMetricsAsync()
+    public async Task<List<ProcessMetrics>> CollectMetrics()
     {
         var allMetrics = new List<ProcessMetrics>();
         
         try
         {
-            var instances = await _applicationManager.GetAllInstancesAsync();
+            var instances = await _applicationManager.GetAllInstances();
             
             foreach (var instance in instances)
             {
                 if (instance.Status == ApplicationStatus.Running && instance.ProcessId.HasValue)
                 {
-                    var metrics = await _processManager.GetProcessMetricsAsync(instance.InstanceId);
+                    var metrics = await _processManager.GetProcessMetrics(instance.InstanceId);
                     if (metrics != null)
                     {
                         allMetrics.Add(metrics);
@@ -144,29 +145,29 @@ public class MonitorService : IMonitorServiceInternal
         return allMetrics;
     }
     
-    public async Task<bool> CheckHealthAsync(string instanceId)
+    public async Task<bool> CheckHealth(string instanceId)
     {
         try
         {
-            var instance = await _applicationManager.GetApplicationInstanceAsync(instanceId);
+            var instance = await _applicationManager.GetApplicationInstance(instanceId);
             if (instance == null)
                 return false;
             
             // Check if process is running
-            var isRunning = await _processManager.IsProcessRunningAsync(instanceId);
+            var isRunning = await _processManager.IsProcessRunning(instanceId);
             if (!isRunning)
                 return false;
             
             // If health check URL is provided, perform HTTP health check
             if (!string.IsNullOrEmpty(instance.Command?.HealthCheckUrl))
             {
-                return await _healthChecker.PerformHttpHealthCheckAsync(
+                return await _healthChecker.PerformHttpHealthCheck(
                     instance.Command.HealthCheckUrl,
                     instance.Command.HealthCheckInterval);
             }
             
             // Default health check: process is running and responsive
-            var processInfo = await _processManager.GetProcessInfoAsync(instanceId);
+            var processInfo = await _processManager.GetProcessInfo(instanceId);
             return processInfo != null && processInfo.Status == "Running";
         }
         catch (Exception ex)
@@ -176,18 +177,18 @@ public class MonitorService : IMonitorServiceInternal
         }
     }
     
-    public async Task<List<HealthCheckResult>> CheckAllHealthAsync()
+    public async Task<List<HealthCheckResult>> CheckAllHealth()
     {
         var results = new List<HealthCheckResult>();
         
         try
         {
-            var instances = await _applicationManager.GetAllInstancesAsync();
+            var instances = await _applicationManager.GetAllInstances();
             var runningInstances = instances.Where(i => i.Status == ApplicationStatus.Running);
             
             foreach (var instance in runningInstances)
             {
-                var isHealthy = await CheckHealthAsync(instance.InstanceId);
+                var isHealthy = await CheckHealth(instance.InstanceId);
                 
                 results.Add(new HealthCheckResult
                 {
@@ -204,7 +205,7 @@ public class MonitorService : IMonitorServiceInternal
                         instance.InstanceId);
                     
                     // Update instance status
-                    await _applicationManager.UpdateInstanceStatusAsync(
+                    await _applicationManager.UpdateInstanceStatus(
                         instance.InstanceId,
                         ApplicationStatus.Unhealthy);
                 }
@@ -225,11 +226,11 @@ public class MonitorService : IMonitorServiceInternal
         return results;
     }
     
-    public async Task DetectFailuresAsync()
+    public async Task DetectFailures()
     {
         try
         {
-            var failures = await DetectAllFailuresAsync();
+            var failures = await DetectAllFailures();
             
             foreach (var failure in failures.Where(f => f.IsFailure))
             {
@@ -237,7 +238,7 @@ public class MonitorService : IMonitorServiceInternal
                     "Detected failure for instance {InstanceId}: {Reason}",
                     failure.InstanceId, failure.Reason);
                 
-                await HandleFailureAsync(failure);
+                await HandleFailure(failure);
             }
         }
         catch (Exception ex)
@@ -246,17 +247,17 @@ public class MonitorService : IMonitorServiceInternal
         }
     }
     
-    public async Task<List<FailureDetection>> DetectAllFailuresAsync()
+    public async Task<List<FailureDetection>> DetectAllFailures()
     {
         var detections = new List<FailureDetection>();
         
         try
         {
-            var instances = await _applicationManager.GetAllInstancesAsync();
+            var instances = await _applicationManager.GetAllInstances();
             
             foreach (var instance in instances)
             {
-                var detection = await DetectInstanceFailureAsync(instance);
+                var detection = await DetectInstanceFailure(instance);
                 detections.Add(detection);
             }
             
@@ -270,7 +271,7 @@ public class MonitorService : IMonitorServiceInternal
         return detections;
     }
     
-    private async Task CollectAndReportMetricsAsync()
+    private async Task CollectAndReportMetrics()
     {
         try
         {
@@ -278,10 +279,10 @@ public class MonitorService : IMonitorServiceInternal
                 return;
             
             // Collect metrics
-            var metrics = await CollectMetricsAsync();
+            var metrics = await CollectMetrics();
             
             // Build metrics report
-            var systemMetrics = await GetSystemMetricsAsync();
+            var systemMetrics = await GetSystemMetrics();
             var metricsReport = new MetricsReport
             {
                 AgentId = Environment.MachineName,
@@ -305,7 +306,7 @@ public class MonitorService : IMonitorServiceInternal
             }
             
             // Send metrics via gRPC if connected
-            await _grpcClient.SendMetricsAsync(metricsReport);
+            await _grpcClient.SendMetrics(metricsReport);
             
         }
         catch (Exception ex)
@@ -314,7 +315,7 @@ public class MonitorService : IMonitorServiceInternal
         }
     }
     
-    private async Task PerformHealthChecksAsync()
+    private async Task PerformHealthChecks()
     {
         try
         {
@@ -323,7 +324,7 @@ public class MonitorService : IMonitorServiceInternal
             
             _logger.LogDebug("Performing periodic health checks");
             
-            await CheckAllHealthAsync();
+            await CheckAllHealth();
         }
         catch (Exception ex)
         {
@@ -331,7 +332,7 @@ public class MonitorService : IMonitorServiceInternal
         }
     }
     
-    private async Task DetectAndHandleFailuresAsync()
+    private async Task DetectAndHandleFailures()
     {
         try
         {
@@ -340,7 +341,7 @@ public class MonitorService : IMonitorServiceInternal
             
             _logger.LogDebug("Running failure detection");
             
-            await DetectFailuresAsync();
+            await DetectFailures();
         }
         catch (Exception ex)
         {
@@ -348,7 +349,7 @@ public class MonitorService : IMonitorServiceInternal
         }
     }
     
-    private async Task<FailureDetection> DetectInstanceFailureAsync(ManagedApplication instance)
+    private async Task<FailureDetection> DetectInstanceFailure(ManagedApplication instance)
     {
         var detection = new FailureDetection
         {
@@ -363,7 +364,7 @@ public class MonitorService : IMonitorServiceInternal
             if (instance.Status == ApplicationStatus.Running)
             {
                 // Check if process is still running
-                var isRunning = await _processManager.IsProcessRunningAsync(instance.InstanceId);
+                var isRunning = await _processManager.IsProcessRunning(instance.InstanceId);
                 if (!isRunning)
                 {
                     detection.IsFailure = true;
@@ -373,7 +374,7 @@ public class MonitorService : IMonitorServiceInternal
                 }
                 
                 // Check health
-                var isHealthy = await CheckHealthAsync(instance.InstanceId);
+                var isHealthy = await CheckHealth(instance.InstanceId);
                 if (!isHealthy)
                 {
                     detection.IsFailure = true;
@@ -383,7 +384,7 @@ public class MonitorService : IMonitorServiceInternal
                 }
                 
                 // Check resource usage
-                var metrics = await _processManager.GetProcessMetricsAsync(instance.InstanceId);
+                var metrics = await _processManager.GetProcessMetrics(instance.InstanceId);
                 if (metrics != null)
                 {
                     if (metrics.CpuPercent > _monitoringSettings.Value.MaxCpuThreshold)
@@ -422,7 +423,7 @@ public class MonitorService : IMonitorServiceInternal
             else if (instance.Status == ApplicationStatus.Error || instance.Status == ApplicationStatus.Stopped)
             {
                 // Check if we should restart this instance
-                var shouldRestart = await _applicationManager.ShouldRestartInstanceAsync(instance);
+                var shouldRestart = await _applicationManager.ShouldRestartInstance(instance);
                 if (shouldRestart)
                 {
                     detection.IsFailure = true;
@@ -444,7 +445,7 @@ public class MonitorService : IMonitorServiceInternal
         return detection;
     }
     
-    private async Task HandleFailureAsync(FailureDetection failure)
+    private async Task HandleFailure(FailureDetection failure)
     {
         try
         {
@@ -460,12 +461,12 @@ public class MonitorService : IMonitorServiceInternal
                 case FailureType.HungProcess:
                     if (failure.ShouldRestart)
                     {
-                        await HandleRestartAsync(failure);
+                        await HandleRestart(failure);
                     }
                     break;
                     
                 case FailureType.Stopped:
-                    await HandleRestartAsync(failure);
+                    await HandleRestart(failure);
                     break;
                     
                 case FailureType.DetectionError:
@@ -479,19 +480,19 @@ public class MonitorService : IMonitorServiceInternal
         }
     }
     
-    private async Task HandleRestartAsync(FailureDetection failure)
+    private async Task HandleRestart(FailureDetection failure)
     {
         try
         {
             // Increment restart count
-            await _applicationManager.IncrementRestartCountAsync(failure.InstanceId);
+            await _applicationManager.IncrementRestartCount(failure.InstanceId);
             
             // Check if we should restart
-            var instance = await _applicationManager.GetApplicationInstanceAsync(failure.InstanceId);
+            var instance = await _applicationManager.GetApplicationInstance(failure.InstanceId);
             if (instance == null)
                 return;
             
-            var shouldRestart = await _applicationManager.ShouldRestartInstanceAsync(instance);
+            var shouldRestart = await _applicationManager.ShouldRestartInstance(instance);
             if (!shouldRestart)
             {
                 _logger.LogWarning(
@@ -505,7 +506,7 @@ public class MonitorService : IMonitorServiceInternal
                 "Restarting instance {InstanceId} (attempt {Attempt})",
                 failure.InstanceId, instance.RestartCount);
             
-            var success = await _processManager.RestartProcessAsync(failure.InstanceId);
+            var success = await _processManager.RestartProcess(failure.InstanceId);
             
             if (success)
             {
@@ -526,7 +527,7 @@ public class MonitorService : IMonitorServiceInternal
         }
     }
     
-    private async Task<SystemMetrics> GetSystemMetricsAsync()
+    private async Task<SystemMetrics> GetSystemMetrics()
     {
         try
         {
@@ -536,7 +537,7 @@ public class MonitorService : IMonitorServiceInternal
             
             return new SystemMetrics
             {
-                CpuPercent = await GetSystemCpuUsageAsync(),
+                CpuPercent = await GetSystemCpuUsage(),
                 MemoryPercent = memoryInfo.UsedPercentage,
                 DiskPercent = diskInfo.UsedPercentage,
                 TotalProcesses = Process.GetProcesses().Length,
@@ -554,7 +555,7 @@ public class MonitorService : IMonitorServiceInternal
         }
     }
     
-    private Task<double> GetSystemCpuUsageAsync()
+    private Task<double> GetSystemCpuUsage()
     {
         // This would use PerformanceCounter or WMI on Windows
         // Simplified implementation

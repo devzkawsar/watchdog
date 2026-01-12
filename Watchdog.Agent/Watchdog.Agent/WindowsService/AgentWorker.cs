@@ -1,6 +1,7 @@
 using Watchdog.Agent.Configuration;
 using Watchdog.Agent.Services;
 using Microsoft.Extensions.Options;
+using Watchdog.Agent.Interface;
 
 namespace Watchdog.Agent.WindowsService;
 
@@ -33,7 +34,7 @@ public class AgentWorker : BackgroundService
         _agentSettings = agentSettings;
         _controlPlaneSettings = controlPlaneSettings;
     }
-    
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         _logger.LogInformation("Watchdog Agent worker starting");
@@ -41,27 +42,27 @@ public class AgentWorker : BackgroundService
         try
         {
             // Initialize application manager
-            await _applicationManager.InitializeAsync();
+            await _applicationManager.Initialize();
             
             // Auto-register if configured
             if (_agentSettings.Value.AutoRegister)
             {
-                await RegisterWithControlPlaneAsync(stoppingToken);
+                await RegisterWithControlPlane(stoppingToken);
             }
             
             // Start monitoring service
-            await _monitorService.StartAsync(stoppingToken);
+            await _monitorService.Start(stoppingToken);
             
             // Start status reporting timer (every 5 seconds)
             _statusReportTimer = new Timer(
-                async _ => await ReportStatusAsync(stoppingToken),
+                async _ => await ReportStatus(stoppingToken),
                 null,
                 TimeSpan.FromSeconds(5),
                 TimeSpan.FromSeconds(5));
             
             // Start reconnect timer (every 30 seconds)
             _reconnectTimer = new Timer(
-                async _ => await CheckConnectionAndReconnectAsync(stoppingToken),
+                async _ => await CheckConnectionAndReconnect(stoppingToken),
                 null,
                 TimeSpan.FromSeconds(30),
                 TimeSpan.FromSeconds(30));
@@ -94,12 +95,12 @@ public class AgentWorker : BackgroundService
         }
         finally
         {
-            await CleanupAsync();
+            await Cleanup();
             _logger.LogInformation("Watchdog Agent worker stopped");
         }
     }
     
-    private async Task RegisterWithControlPlaneAsync(CancellationToken cancellationToken)
+    private async Task RegisterWithControlPlane(CancellationToken cancellationToken)
     {
         _logger.LogInformation("Attempting to register with control plane...");
         
@@ -107,7 +108,7 @@ public class AgentWorker : BackgroundService
         {
             try
             {
-                var connected = await _grpcClient.ConnectAsync(cancellationToken);
+                var connected = await _grpcClient.Connect(cancellationToken);
                 
                 if (connected)
                 {
@@ -142,7 +143,7 @@ public class AgentWorker : BackgroundService
         }
     }
     
-    private async Task ReportStatusAsync(CancellationToken cancellationToken)
+    private async Task ReportStatus(CancellationToken cancellationToken)
     {
         try
         {
@@ -150,7 +151,7 @@ public class AgentWorker : BackgroundService
                 return;
             
             // Check if connected to control plane
-            var isConnected = await _grpcClient.IsConnectedAsync();
+            var isConnected = await _grpcClient.IsConnected();
             if (!isConnected)
             {
                 _logger.LogDebug("Not connected to control plane, skipping status report");
@@ -158,7 +159,7 @@ public class AgentWorker : BackgroundService
             }
             
             // Report to orchestrator
-            await _applicationManager.ReportToOrchestratorAsync();
+            await _applicationManager.ReportToOrchestrator();
         }
         catch (Exception ex)
         {
@@ -166,18 +167,18 @@ public class AgentWorker : BackgroundService
         }
     }
     
-    private async Task CheckConnectionAndReconnectAsync(CancellationToken cancellationToken)
+    private async Task CheckConnectionAndReconnect(CancellationToken cancellationToken)
     {
         try
         {
             if (!_isRunning)
                 return;
             
-            var isConnected = await _grpcClient.IsConnectedAsync();
+            var isConnected = await _grpcClient.IsConnected();
             if (!isConnected)
             {
                 _logger.LogWarning("Lost connection to control plane, attempting to reconnect...");
-                await _grpcClient.ConnectAsync(cancellationToken);
+                await _grpcClient.Connect(cancellationToken);
             }
         }
         catch (Exception ex)
@@ -186,15 +187,15 @@ public class AgentWorker : BackgroundService
         }
     }
     
-    private async Task CleanupAsync()
+    private async Task Cleanup()
     {
         _isRunning = false;
         
         _statusReportTimer?.Dispose();
         _reconnectTimer?.Dispose();
         
-        await _monitorService.StopAsync();
-        await _grpcClient.DisconnectAsync();
+        await _monitorService.Stop();
+        await _grpcClient.Disconnect();
         
         _logger.LogInformation("Agent worker cleanup completed");
     }

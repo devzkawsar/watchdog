@@ -3,6 +3,7 @@ using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using Microsoft.Extensions.Options;
 using Watchdog.Agent.Configuration;
+using Watchdog.Agent.Interface;
 
 namespace Watchdog.Agent.Services;
 
@@ -35,7 +36,7 @@ public class NetworkManager : INetworkManagerInternal
             _networkSettings.Value.PortRangeEnd);
     }
     
-    public Task<int> AllocatePortAsync(int preferredPort = 0)
+    public Task<int> AllocatePort(int preferredPort = 0)
     {
         lock (_lock)
         {
@@ -71,7 +72,7 @@ public class NetworkManager : INetworkManagerInternal
         }
     }
     
-    public Task<bool> ReleasePortAsync(int port)
+    public Task<bool> ReleasePort(int port)
     {
         lock (_lock)
         {
@@ -88,7 +89,7 @@ public class NetworkManager : INetworkManagerInternal
         }
     }
     
-    public Task<bool> ReleasePortsAsync(List<int> ports)
+    public Task<bool> ReleasePorts(List<int> ports)
     {
         lock (_lock)
         {
@@ -106,7 +107,7 @@ public class NetworkManager : INetworkManagerInternal
         }
     }
     
-    public Task<List<int>> GetAvailablePortsAsync()
+    public Task<List<int>> GetAvailablePorts()
     {
         lock (_lock)
         {
@@ -126,13 +127,13 @@ public class NetworkManager : INetworkManagerInternal
         }
     }
     
-    public async Task<int> GetAvailablePortCountAsync()
+    public async Task<int> GetAvailablePortCount()
     {
-        var availablePorts = await GetAvailablePortsAsync();
+        var availablePorts = await GetAvailablePorts();
         return availablePorts.Count;
     }
     
-    public Task<bool> IsPortAvailableAsync(int port)
+    public Task<bool> IsPortAvailable(int port)
     {
         lock (_lock)
         {
@@ -140,17 +141,17 @@ public class NetworkManager : INetworkManagerInternal
         }
     }
     
-    public async Task<bool> IsPortInUseAsync(int port)
+    public async Task<bool> IsPortInUse(int port)
     {
         if (_networkSettings.Value.CheckPortAvailability)
         {
-            return await CheckPortInUseAsync(port);
+            return await CheckPortInUse(port);
         }
         
         return false;
     }
     
-    public Task<List<NetworkInterfaceInfo>> GetNetworkInterfacesAsync()
+    public Task<List<NetworkInterfaceInfo>> GetNetworkInterfaces()
     {
         var interfaces = new List<NetworkInterfaceInfo>();
         
@@ -253,7 +254,7 @@ public class NetworkManager : INetworkManagerInternal
         }
     }
     
-    private async Task<bool> CheckPortInUseAsync(int port)
+    private async Task<bool> CheckPortInUse(int port)
     {
         return await Task.Run(() => CheckPortInUseSync(port));
     }

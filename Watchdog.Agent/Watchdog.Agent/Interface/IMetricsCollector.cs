@@ -1,4 +1,4 @@
-namespace Watchdog.Agent.Services;
+namespace Watchdog.Agent.Interface;
 
 public interface IMetricsCollector
 {

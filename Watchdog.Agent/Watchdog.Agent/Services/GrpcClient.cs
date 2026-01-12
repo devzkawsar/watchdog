@@ -7,6 +7,7 @@ using Grpc.Net.Client;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Watchdog.Agent.Configuration;
+using Watchdog.Agent.Interface;
 using Watchdog.Agent.Models;
 using Watchdog.Agent.Protos;
 
@@ -53,7 +54,7 @@ public class GrpcClient : IGrpcClientInternal
         _commandExecutor = commandExecutor;
     }
     
-    public async Task<bool> ConnectAsync(CancellationToken cancellationToken = default)
+    public async Task<bool> Connect(CancellationToken cancellationToken = default)
     {
         lock (_connectionLock)
         {
@@ -99,23 +100,23 @@ public class GrpcClient : IGrpcClientInternal
             _logger.LogInformation("Successfully connected to control plane");
             
             // Register with control plane
-            var registration = await RegisterAsync(cancellationToken);
+            var registration = await Register(cancellationToken);
             if (registration == null || !registration.Success)
             {
                 _logger.LogError("Failed to register with control plane");
-                await DisconnectAsync();
+                await Disconnect();
                 return false;
             }
             
             // Update applications from control plane
             if (registration.Applications.Any())
             {
-                await _applicationManager.UpdateApplicationsFromControlPlaneAsync(
+                await _applicationManager.UpdateApplicationsFromControlPlane(
                     registration.Applications.ToList());
             }
             
             // Start command streaming
-            await StartCommandStreamingAsync(cancellationToken);
+            await StartCommandStreaming(cancellationToken);
             
             return true;
         }
@@ -132,7 +133,7 @@ public class GrpcClient : IGrpcClientInternal
         }
     }
     
-    public async Task DisconnectAsync()
+    public async Task Disconnect()
     {
         lock (_connectionLock)
         {
@@ -174,7 +175,7 @@ public class GrpcClient : IGrpcClientInternal
         }
     }
     
-    public Task<bool> IsConnectedAsync()
+    public Task<bool> IsConnected()
     {
         lock (_connectionLock)
         {
@@ -182,7 +183,7 @@ public class GrpcClient : IGrpcClientInternal
         }
     }
     
-    public async Task<AgentRegistrationResponse?> RegisterAsync(CancellationToken cancellationToken = default)
+    public async Task<AgentRegistrationResponse?> Register(CancellationToken cancellationToken = default)
     {
         try
         {
@@ -216,7 +217,7 @@ public class GrpcClient : IGrpcClientInternal
         }
     }
     
-    public async Task<bool> ReportStatusAsync(StatusReportRequest request, CancellationToken cancellationToken = default)
+    public async Task<bool> ReportStatus(StatusReportRequest request, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -230,7 +231,7 @@ public class GrpcClient : IGrpcClientInternal
                 // Process pending commands
                 foreach (var command in response.PendingCommands)
                 {
-                    await _commandExecutor.ExecuteCommandAsync(command, cancellationToken);
+                    await _commandExecutor.ExecuteCommand(command, cancellationToken);
                 }
             }
             
@@ -243,7 +244,7 @@ public class GrpcClient : IGrpcClientInternal
         }
     }
     
-    public async Task<bool> SendMetricsAsync(MetricsReport report, CancellationToken cancellationToken = default)
+    public async Task<bool> SendMetrics(MetricsReport report, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -270,7 +271,7 @@ public class GrpcClient : IGrpcClientInternal
         }
     }
     
-    public async Task<bool> SendHeartbeatAsync(CancellationToken cancellationToken = default)
+    public async Task<bool> SendHeartbeat(CancellationToken cancellationToken = default)
     {
         try
         {
@@ -303,7 +304,7 @@ public class GrpcClient : IGrpcClientInternal
         }
     }
     
-    public async Task<bool> SendApplicationSpawnedAsync(ApplicationSpawned spawned, CancellationToken cancellationToken = default)
+    public async Task<bool> SendApplicationSpawned(ApplicationSpawned spawned, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -335,7 +336,7 @@ public class GrpcClient : IGrpcClientInternal
         }
     }
     
-    public async Task<bool> SendApplicationStoppedAsync(ApplicationStopped stopped, CancellationToken cancellationToken = default)
+    public async Task<bool> SendApplicationStopped(ApplicationStopped stopped, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -367,7 +368,7 @@ public class GrpcClient : IGrpcClientInternal
         }
     }
     
-    public async Task<bool> SendErrorAsync(ErrorReport error, CancellationToken cancellationToken = default)
+    public async Task<bool> SendError(ErrorReport error, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -399,7 +400,7 @@ public class GrpcClient : IGrpcClientInternal
         }
     }
     
-    public Task StartCommandStreamingAsync(CancellationToken cancellationToken = default)
+    public Task StartCommandStreaming(CancellationToken cancellationToken = default)
     {
         try
         {
@@ -410,11 +411,11 @@ public class GrpcClient : IGrpcClientInternal
             
             // Start receiving commands
             _streamReceiveTask = Task.Run(async () => 
-                await ReceiveCommandsAsync(_streamCts.Token), _streamCts.Token);
+                await ReceiveCommands(_streamCts.Token), _streamCts.Token);
             
             // Start sending heartbeats
             _streamSendTask = Task.Run(async () => 
-                await SendHeartbeatsAsync(_streamCts.Token), _streamCts.Token);
+                await SendHeartbeats(_streamCts.Token), _streamCts.Token);
             
             _logger.LogInformation("Started gRPC command streaming");
         }
@@ -427,13 +428,13 @@ public class GrpcClient : IGrpcClientInternal
         return Task.CompletedTask;
     }
     
-    private async Task ReceiveCommandsAsync(CancellationToken cancellationToken)
+    private async Task ReceiveCommands(CancellationToken cancellationToken)
     {
         try
         {
             await foreach (var controlMessage in _stream!.ResponseStream.ReadAllAsync(cancellationToken))
             {
-                await ProcessControlMessageAsync(controlMessage, cancellationToken);
+                await ProcessControlMessage(controlMessage, cancellationToken);
             }
         }
         catch (RpcException rpcEx) when (rpcEx.StatusCode == StatusCode.Cancelled)
@@ -445,17 +446,17 @@ public class GrpcClient : IGrpcClientInternal
             _logger.LogError(ex, "Error in command stream");
             
             // Attempt to reconnect
-            await AttemptReconnectAsync(cancellationToken);
+            await AttemptReconnect(cancellationToken);
         }
     }
     
-    private async Task SendHeartbeatsAsync(CancellationToken cancellationToken)
+    private async Task SendHeartbeats(CancellationToken cancellationToken)
     {
         while (!cancellationToken.IsCancellationRequested)
         {
             try
             {
-                await SendHeartbeatAsync(cancellationToken);
+                await SendHeartbeat(cancellationToken);
                 await Task.Delay(TimeSpan.FromSeconds(30), cancellationToken);
             }
             catch (Exception ex)
@@ -466,26 +467,26 @@ public class GrpcClient : IGrpcClientInternal
         }
     }
     
-    private Task ProcessControlMessageAsync(ControlPlaneMessage message, CancellationToken cancellationToken)
+    private Task ProcessControlMessage(ControlPlaneMessage message, CancellationToken cancellationToken)
     {
         try
         {
             switch (message.MessageCase)
             {
                 case ControlPlaneMessage.MessageOneofCase.Spawn:
-                    return ProcessSpawnCommandAsync(message.Spawn, cancellationToken);
+                    return ProcessSpawnCommand(message.Spawn, cancellationToken);
                     
                 case ControlPlaneMessage.MessageOneofCase.Kill:
-                    return ProcessKillCommandAsync(message.Kill, cancellationToken);
+                    return ProcessKillCommand(message.Kill, cancellationToken);
                     
                 case ControlPlaneMessage.MessageOneofCase.Restart:
-                    return ProcessRestartCommandAsync(message.Restart, cancellationToken);
+                    return ProcessRestartCommand(message.Restart, cancellationToken);
                     
                 case ControlPlaneMessage.MessageOneofCase.Update:
-                    return ProcessUpdateCommandAsync(message.Update, cancellationToken);
+                    return ProcessUpdateCommand(message.Update, cancellationToken);
                     
                 case ControlPlaneMessage.MessageOneofCase.Config:
-                    return ProcessConfigurationUpdateAsync(message.Config, cancellationToken);
+                    return ProcessConfigurationUpdate(message.Config, cancellationToken);
                     
                 default:
                     _logger.LogWarning("Received unknown control message type: {Type}", message.MessageCase);
@@ -497,7 +498,7 @@ public class GrpcClient : IGrpcClientInternal
             _logger.LogError(ex, "Error processing control message");
             
             // Send error report
-            return SendErrorAsync(new ErrorReport
+            return SendError(new ErrorReport
             {
                 AgentId = _agentSettings.Value.AgentId,
                 ErrorType = "CommandProcessingError",
@@ -508,32 +509,32 @@ public class GrpcClient : IGrpcClientInternal
         }
     }
     
-    private async Task ProcessSpawnCommandAsync(SpawnCommand command, CancellationToken cancellationToken)
+    private async Task ProcessSpawnCommand(SpawnCommand command, CancellationToken cancellationToken)
     {
         _logger.LogInformation(
             "Processing spawn command for application {AppId} instance {InstanceId}",
             command.ApplicationId, command.InstanceId);
         
         // Create application instance
-        var instance = await _applicationManager.CreateApplicationInstanceAsync(command);
+        var instance = await _applicationManager.CreateApplicationInstance(command);
         
         // Allocate ports
-        var ports = await AllocatePortsAsync(command.Ports.ToList());
+        var ports = await AllocatePorts(command.Ports.ToList());
         
         // Spawn process
-        var result = await _processManager.SpawnProcessAsync(command, ports);
+        var result = await _processManager.SpawnProcess(command, ports);
         
         if (result.Success)
         {
             // Update instance status
-            await _applicationManager.UpdateInstanceStatusAsync(
+            await _applicationManager.UpdateInstanceStatus(
                 command.InstanceId,
                 ApplicationStatus.Running,
                 result.ProcessId,
                 result.Ports);
             
             // Report success to control plane
-            await SendApplicationSpawnedAsync(new ApplicationSpawned
+            await SendApplicationSpawned(new ApplicationSpawned
             {
                 InstanceId = command.InstanceId,
                 ApplicationId = command.ApplicationId,
@@ -549,12 +550,12 @@ public class GrpcClient : IGrpcClientInternal
         else
         {
             // Update instance status
-            await _applicationManager.UpdateInstanceStatusAsync(
+            await _applicationManager.UpdateInstanceStatus(
                 command.InstanceId,
                 ApplicationStatus.Error);
             
             // Report error to control plane
-            await SendErrorAsync(new ErrorReport
+            await SendError(new ErrorReport
             {
                 AgentId = _agentSettings.Value.AgentId,
                 ErrorType = "SpawnFailed",
@@ -568,13 +569,13 @@ public class GrpcClient : IGrpcClientInternal
         }
     }
     
-    private async Task ProcessKillCommandAsync(KillCommand command, CancellationToken cancellationToken)
+    private async Task ProcessKillCommand(KillCommand command, CancellationToken cancellationToken)
     {
         _logger.LogInformation(
             "Processing kill command for instance {InstanceId}", 
             command.InstanceId);
         
-        var success = await _processManager.KillProcessAsync(
+        var success = await _processManager.KillProcess(
             command.InstanceId,
             command.Force,
             command.TimeoutSeconds);
@@ -582,7 +583,7 @@ public class GrpcClient : IGrpcClientInternal
         if (success)
         {
             // Report stopped to control plane
-            await SendApplicationStoppedAsync(new ApplicationStopped
+            await SendApplicationStopped(new ApplicationStopped
             {
                 InstanceId = command.InstanceId,
                 ApplicationId = "unknown", // Would need to get from instance
@@ -593,7 +594,7 @@ public class GrpcClient : IGrpcClientInternal
         }
         else
         {
-            await SendErrorAsync(new ErrorReport
+            await SendError(new ErrorReport
             {
                 AgentId = _agentSettings.Value.AgentId,
                 ErrorType = "KillFailed",
@@ -603,19 +604,19 @@ public class GrpcClient : IGrpcClientInternal
         }
     }
     
-    private async Task ProcessRestartCommandAsync(RestartCommand command, CancellationToken cancellationToken)
+    private async Task ProcessRestartCommand(RestartCommand command, CancellationToken cancellationToken)
     {
         _logger.LogInformation(
             "Processing restart command for instance {InstanceId}", 
             command.InstanceId);
         
-        var success = await _processManager.RestartProcessAsync(
+        var success = await _processManager.RestartProcess(
             command.InstanceId,
             command.TimeoutSeconds);
         
         if (!success)
         {
-            await SendErrorAsync(new ErrorReport
+            await SendError(new ErrorReport
             {
                 AgentId = _agentSettings.Value.AgentId,
                 ErrorType = "RestartFailed",
@@ -625,7 +626,7 @@ public class GrpcClient : IGrpcClientInternal
         }
     }
     
-    private Task ProcessUpdateCommandAsync(UpdateCommand command, CancellationToken cancellationToken)
+    private Task ProcessUpdateCommand(UpdateCommand command, CancellationToken cancellationToken)
     {
         _logger.LogInformation(
             "Processing update command for instance {InstanceId}", 
@@ -637,7 +638,7 @@ public class GrpcClient : IGrpcClientInternal
         return Task.CompletedTask;
     }
     
-    private Task ProcessConfigurationUpdateAsync(ConfigurationUpdate config, CancellationToken cancellationToken)
+    private Task ProcessConfigurationUpdate(ConfigurationUpdate config, CancellationToken cancellationToken)
     {
         _logger.LogInformation("Processing configuration update");
         
@@ -654,7 +655,7 @@ public class GrpcClient : IGrpcClientInternal
         return Task.CompletedTask;
     }
     
-    private Task<List<PortMapping>> AllocatePortsAsync(List<PortAssignment> portAssignments)
+    private Task<List<PortMapping>> AllocatePorts(List<PortAssignment> portAssignments)
     {
         var ports = new List<PortMapping>();
         
@@ -674,7 +675,7 @@ public class GrpcClient : IGrpcClientInternal
         return Task.FromResult(ports);
     }
     
-    private async Task AttemptReconnectAsync(CancellationToken cancellationToken)
+    private async Task AttemptReconnect(CancellationToken cancellationToken)
     {
         lock (_connectionLock)
         {
@@ -691,13 +692,13 @@ public class GrpcClient : IGrpcClientInternal
             "Attempting to reconnect (attempt {Attempt}/{Max})", 
             _reconnectAttempts, _controlPlaneSettings.Value.MaxReconnectAttempts);
         
-        await DisconnectAsync();
+        await Disconnect();
         
         await Task.Delay(
             TimeSpan.FromSeconds(_controlPlaneSettings.Value.ReconnectIntervalSeconds), 
             cancellationToken);
         
-        await ConnectAsync(cancellationToken);
+        await Connect(cancellationToken);
     }
     
     private string GetLocalIpAddress()
