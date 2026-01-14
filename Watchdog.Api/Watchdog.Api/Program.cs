@@ -44,9 +44,9 @@ builder.Services.AddGrpc(options =>
 });
 
 // Background Services
-// builder.Services.AddHostedService<ScalingBackgroundService>();
-// builder.Services.AddHostedService<CommandDispatcherBackgroundService>();
-// builder.Services.AddHostedService<GrpcConnectionCleanupBackgroundService>();
+builder.Services.AddHostedService<ScalingBackgroundService>();
+builder.Services.AddHostedService<CommandDispatcherBackgroundService>();
+builder.Services.AddHostedService<GrpcConnectionCleanupBackgroundService>();
 
 builder.Services.AddHttpClient();
 
