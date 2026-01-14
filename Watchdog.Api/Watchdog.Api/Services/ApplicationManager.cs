@@ -231,7 +231,7 @@ public class ApplicationManager : IApplicationManager
                 "Scaling up application {ApplicationId}: {Needed} more instances needed",
                 application.Id, needed);
             
-            await StartApplicationAsync(application.Id);
+            await StartApplication(application.Id);
         }
         else if (runningInstances > application.DesiredInstances)
         {

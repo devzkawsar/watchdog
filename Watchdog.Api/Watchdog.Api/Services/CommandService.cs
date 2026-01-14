@@ -277,7 +277,7 @@ public class CommandService : ICommandService
             };
             
             // Try to send via gRPC
-            var sent = await _agentGrpcService.SendCommandToAgent(command.AgentId, grpcCommand);
+            var sent = await _agentGrpcService.SendCommandToAgentAsync(command.AgentId, grpcCommand);
             
             if (sent)
             {

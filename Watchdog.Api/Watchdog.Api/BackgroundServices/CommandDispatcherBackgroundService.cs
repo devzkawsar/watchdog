@@ -35,7 +35,7 @@ public class CommandDispatcherBackgroundService : BackgroundService
                 var agentManager = scope.ServiceProvider.GetRequiredService<IAgentManager>();
 
                 // Clean up old commands
-                await commandService.CleanupOldCommandsAsync();
+                await commandService.CleanupOldCommands();
                 
                 // Dispatch pending commands to all agents
                 await DispatchPendingCommandsAsync(agentManager, commandService);
@@ -59,7 +59,7 @@ public class CommandDispatcherBackgroundService : BackgroundService
     {
         try
         {
-            var agents = await agentManager.GetOnlineAgentsAsync();
+            var agents = await agentManager.GetOnlineAgents();
 
             foreach (var agent in agents)
             {
@@ -76,7 +76,7 @@ public class CommandDispatcherBackgroundService : BackgroundService
     {
         try
         {
-            var pendingCommands = await commandService.GetPendingCommandsAsync(agentId);
+            var pendingCommands = await commandService.GetPendingCommands(agentId);
             
             if (!pendingCommands.Any())
                 return;
@@ -118,7 +118,7 @@ public class CommandDispatcherBackgroundService : BackgroundService
             {
                 using var scope = _scopeFactory.CreateScope();
                 var commandService = scope.ServiceProvider.GetRequiredService<ICommandService>();
-                await commandService.MarkCommandAsSentAsync(command.CommandId);
+                await commandService.MarkCommandAsSent(command.CommandId);
                 _logger.LogDebug(
                     "Sent command {CommandId} to agent {AgentId}", 
                     command.CommandId, agentId);

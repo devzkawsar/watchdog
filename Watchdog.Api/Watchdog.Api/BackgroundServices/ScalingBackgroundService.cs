@@ -28,7 +28,7 @@ public class ScalingBackgroundService : BackgroundService
                 _logger.LogDebug("Checking application scaling...");
                 using var scope = _scopeFactory.CreateScope();
                 var scalingEngine = scope.ServiceProvider.GetRequiredService<IScalingEngine>();
-                await scalingEngine.CheckAndScaleApplicationsAsync();
+                await scalingEngine.CheckAndScaleApplications();
             }
             catch (Exception ex)
             {

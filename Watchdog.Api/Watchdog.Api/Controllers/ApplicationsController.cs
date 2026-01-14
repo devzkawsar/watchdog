@@ -85,7 +85,7 @@ public class ApplicationsController : ControllerBase
             if (!success)
                 return NotFound(new { error = $"Application '{id}' not found" });
             
-            var application = await _applicationManager.GetApplicationAsync(id);
+            var application = await _applicationManager.GetApplication(id);
             return Ok(application);
         }
         catch (Exception ex)

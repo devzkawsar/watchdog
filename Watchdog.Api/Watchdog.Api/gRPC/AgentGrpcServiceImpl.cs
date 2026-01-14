@@ -58,10 +58,10 @@ public class AgentGrpcServiceImpl : AgentService.AgentServiceBase
                 OsVersion = request.OsVersion
             };
             
-            var agent = await _agentManager.RegisterAgentAsync(agentRegistration);
+            var agent = await _agentManager.RegisterAgent(agentRegistration);
             
             // Get assigned applications
-            var assignedApplications = await _agentManager.GetAgentApplicationsAsync(agent.Id);
+            var assignedApplications = await _agentManager.GetAgentApplications(agent.Id);
             var applicationAssignments = assignedApplications.Select(app => new ApplicationAssignment
             {
                 ApplicationId = app.Id,
@@ -118,12 +118,12 @@ public class AgentGrpcServiceImpl : AgentService.AgentServiceBase
         try
         {
             // Update agent heartbeat
-            await _agentManager.UpdateAgentHeartbeatAsync(request.AgentId);
+            await _agentManager.UpdateAgentHeartbeat(request.AgentId);
             
             // Process application statuses
             foreach (var appStatus in request.ApplicationStatuses)
             {
-                await _applicationManager.UpdateInstanceStatusAsync(
+                await _applicationManager.UpdateInstanceStatus(
                     appStatus.InstanceId,
                     appStatus.Status,
                     appStatus.CpuPercent,
@@ -139,7 +139,7 @@ public class AgentGrpcServiceImpl : AgentService.AgentServiceBase
             }
             
             // Get pending commands for this agent
-            var pendingCommands = await _commandService.GetPendingCommandsAsync(request.AgentId);
+            var pendingCommands = await _commandService.GetPendingCommands(request.AgentId);
             var grpcCommands = pendingCommands.Select(cmd => new CommandRequest
             {
                 CommandId = cmd.CommandId,
@@ -314,7 +314,7 @@ public class AgentGrpcServiceImpl : AgentService.AgentServiceBase
             else
             {
                 // Agent not connected, queue command
-                await _commandService.QueueCommandAsync(new CommandQueueItem
+                await _commandService.QueueCommand(new CommandQueueItem
                 {
                     CommandId = request.CommandId,
                     CommandType = request.CommandType,
@@ -370,7 +370,7 @@ public class AgentGrpcServiceImpl : AgentService.AgentServiceBase
             switch (message.MessageCase)
             {
                 case AgentMessage.MessageOneofCase.Heartbeat:
-                    await _agentManager.UpdateAgentHeartbeatAsync(agentId);
+                    await _agentManager.UpdateAgentHeartbeat(agentId);
                     break;
                     
                 case AgentMessage.MessageOneofCase.Spawned:
@@ -390,7 +390,7 @@ public class AgentGrpcServiceImpl : AgentService.AgentServiceBase
                         stopped.ApplicationId, stopped.InstanceId, agentId, stopped.ExitCode);
                     
                     // Update instance status
-                    await _applicationManager.UpdateInstanceStatusAsync(
+                    await _applicationManager.UpdateInstanceStatus(
                         stopped.InstanceId, "Stopped");
                     break;
                     
@@ -411,7 +411,7 @@ public class AgentGrpcServiceImpl : AgentService.AgentServiceBase
     private async Task SendPendingCommandsToAgentAsync(
         string agentId, IServerStreamWriter<ControlPlaneMessage> responseStream)
     {
-        var pendingCommands = await _commandService.GetPendingCommandsAsync(agentId);
+        var pendingCommands = await _commandService.GetPendingCommands(agentId);
         
         foreach (var cmd in pendingCommands)
         {
@@ -420,7 +420,7 @@ public class AgentGrpcServiceImpl : AgentService.AgentServiceBase
                 var controlMessage = await ConvertToControlPlaneMessageAsync(cmd);
                 await responseStream.WriteAsync(controlMessage);
                 
-                await _commandService.MarkCommandAsSentAsync(cmd.CommandId);
+                await _commandService.MarkCommandAsSent(cmd.CommandId);
             }
             catch (Exception ex)
             {
