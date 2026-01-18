@@ -1,11 +1,11 @@
 syntax = "proto3";
 
-package watchdog.agent;
+package Watchdog.Api;
 
 option csharp_namespace = "Watchdog.Agent.Protos";
 
-// Service for agents to communicate with control plane
-service ControlPlaneService {
+// Service for agents to connect to
+service AgentService {
   // Agent registers with control plane
   rpc RegisterAgent (AgentRegistrationRequest) returns (AgentRegistrationResponse);
 
@@ -14,9 +14,6 @@ service ControlPlaneService {
 
   // Bi-directional stream for real-time communication
   rpc CommandStream (stream AgentMessage) returns (stream ControlPlaneMessage);
-
-  // Health check
-  rpc HealthCheck (HealthCheckRequest) returns (HealthCheckResponse);
 }
 
 // Messages for agent -> control plane
@@ -28,12 +25,11 @@ message AgentRegistrationRequest {
   int32 total_memory_mb = 5;
   int32 cpu_cores = 6;
   string os_version = 7;
-  repeated string tags = 8;
 }
 
 message StatusReportRequest {
   string agent_id = 1;
-  repeated ApplicationInstanceStatus instances = 2;
+  repeated ApplicationStatus application_statuses = 2;
   SystemMetrics system_metrics = 3;
   int64 timestamp = 4;
 }
@@ -44,7 +40,6 @@ message AgentMessage {
     ApplicationSpawned spawned = 2;
     ApplicationStopped stopped = 3;
     ErrorReport error = 4;
-    MetricsReport metrics = 5;
   }
 }
 
@@ -55,7 +50,6 @@ message ControlPlaneMessage {
     KillCommand kill = 2;
     RestartCommand restart = 3;
     UpdateCommand update = 4;
-    ConfigurationUpdate config = 5;
   }
 }
 
@@ -65,7 +59,6 @@ message AgentRegistrationResponse {
   string message = 2;
   string assigned_id = 3;
   repeated ApplicationAssignment applications = 4;
-  string configuration = 5; // JSON configuration
 }
 
 message StatusReportResponse {
@@ -74,18 +67,16 @@ message StatusReportResponse {
   repeated CommandRequest pending_commands = 3;
 }
 
-// Application related messages
-message ApplicationInstanceStatus {
-  string instance_id = 1;
-  string application_id = 2;
+message ApplicationStatus {
+  string application_id = 1;
+  string instance_id = 2;
   string status = 3;  // Running, Stopped, Starting, Error
   double cpu_percent = 4;
   double memory_mb = 5;
   repeated PortMapping ports = 6;
   string health_status = 7;  // Healthy, Unhealthy, Unknown
-  string process_id = 8;
-  int64 start_time = 9;
-  int64 uptime_seconds = 10;
+  int64 start_time = 8;
+  string process_id = 9;
 }
 
 message ApplicationAssignment {
@@ -99,8 +90,6 @@ message ApplicationAssignment {
   map<string, string> environment_variables = 8;
   string health_check_url = 9;
   int32 health_check_interval = 10;
-  int32 max_restart_attempts = 11;
-  int32 restart_delay_seconds = 12;
 }
 
 message PortRequirement {
@@ -125,7 +114,7 @@ message SpawnCommand {
   string arguments = 4;
   string working_directory = 5;
   map<string, string> environment_variables = 6;
-  repeated PortAssignment ports = 7;
+  repeated PortMapping ports = 7;
   string health_check_url = 8;
   int32 health_check_interval = 9;
   int32 instance_index = 10;
@@ -147,11 +136,6 @@ message UpdateCommand {
   map<string, string> environment_variables = 2;
 }
 
-message ConfigurationUpdate {
-  string agent_id = 1;
-  string configuration = 2; // JSON
-}
-
 message CommandRequest {
   string command_id = 1;
   string command_type = 2;  // SPAWN, KILL, RESTART, UPDATE
@@ -159,6 +143,7 @@ message CommandRequest {
   string instance_id = 4;
   string parameters = 5;  // JSON
   int64 timestamp = 6;
+  string agent_id = 7;
 }
 
 // Status messages
@@ -191,49 +176,10 @@ message ErrorReport {
   int64 timestamp = 5;
 }
 
-message MetricsReport {
-  string agent_id = 1;
-  SystemMetrics system_metrics = 2;
-  repeated ApplicationMetrics application_metrics = 3;
-  int64 timestamp = 4;
-}
-
-message ApplicationMetrics {
-  string instance_id = 1;
-  double cpu_percent = 2;
-  double memory_mb = 3;
-  int32 thread_count = 4;
-  int64 handle_count = 5;
-  int64 io_read_bytes = 6;
-  int64 io_write_bytes = 7;
-}
-
 message SystemMetrics {
   double cpu_percent = 1;
   double memory_percent = 2;
   double disk_percent = 3;
   int32 total_processes = 4;
   int64 uptime_seconds = 5;
-  int64 total_memory_mb = 6;
-  int64 available_memory_mb = 7;
-  int64 total_disk_gb = 8;
-  int64 available_disk_gb = 9;
-  int32 network_interfaces = 10;
-}
-
-message HealthCheckRequest {
-  string agent_id = 1;
-}
-
-message HealthCheckResponse {
-  bool healthy = 1;
-  string status = 2;
-  int64 timestamp = 3;
-}
-
-message PortAssignment {
-  string name = 1;
-  int32 internal_port = 2;
-  int32 external_port = 3;
-  string protocol = 4;
 }

@@ -1,4 +1,6 @@
-﻿using Watchdog.Api.gRPC;
+﻿using System;
+using System.Threading;
+using Watchdog.Api.gRPC;
 using Watchdog.Api.Interface;
 using Watchdog.Api.Protos;
 using Watchdog.Api.Services;
@@ -25,32 +27,11 @@ public class CommandDispatcherBackgroundService : BackgroundService
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         _logger.LogInformation("Command dispatcher background service started");
-        
-        while (!stoppingToken.IsCancellationRequested)
-        {
-            try
-            {
-                using var scope = _scopeFactory.CreateScope();
-                var commandService = scope.ServiceProvider.GetRequiredService<ICommandService>();
-                var agentManager = scope.ServiceProvider.GetRequiredService<IAgentManager>();
 
-                // Clean up old commands
-                await commandService.CleanupOldCommands();
-                
-                // Dispatch pending commands to all agents
-                await DispatchPendingCommandsAsync(agentManager, commandService);
-                
-                // Wait for next cycle
-                await Task.Delay(_interval, stoppingToken);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error in command dispatcher background service");
-                await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
-            }
-        }
-        
-        _logger.LogInformation("Command dispatcher background service stopped");
+        // Streaming-only command delivery mode:
+        // Commands are pushed to agents via gRPC CommandStream / AgentGrpcServiceImpl.
+        // This background dispatcher is intentionally disabled to avoid double-delivery.
+        await Task.Delay(Timeout.InfiniteTimeSpan, stoppingToken);
     }
     
     private async Task DispatchPendingCommandsAsync(

@@ -34,7 +34,7 @@ public class ApplicationRepository : IApplicationRepository
                 Id, Name, DisplayName, ExecutablePath, Arguments, WorkingDirectory,
                 ApplicationType, HealthCheckUrl, HealthCheckInterval,
                 DesiredInstances, MinInstances, MaxInstances,
-                PortRequirements, EnvironmentVariables, AutoStart,
+                PortRequirements AS PortRequirementsJson, EnvironmentVariables AS EnvironmentVariablesJson, AutoStart,
                 CreatedAt, UpdatedAt
             FROM Applications
             ORDER BY Name";
@@ -69,7 +69,7 @@ public class ApplicationRepository : IApplicationRepository
                 Id, Name, DisplayName, ExecutablePath, Arguments, WorkingDirectory,
                 ApplicationType, HealthCheckUrl, HealthCheckInterval,
                 DesiredInstances, MinInstances, MaxInstances,
-                PortRequirements, EnvironmentVariables, AutoStart,
+                PortRequirements AS PortRequirementsJson, EnvironmentVariables AS EnvironmentVariablesJson, AutoStart,
                 CreatedAt, UpdatedAt
             FROM Applications
             WHERE Id = @Id";

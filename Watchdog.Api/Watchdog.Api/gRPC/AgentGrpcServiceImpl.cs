@@ -138,24 +138,10 @@ public class AgentGrpcServiceImpl : AgentService.AgentServiceBase
                 }
             }
             
-            // Get pending commands for this agent
-            var pendingCommands = await _commandService.GetPendingCommands(request.AgentId);
-            var grpcCommands = pendingCommands.Select(cmd => new CommandRequest
-            {
-                CommandId = cmd.CommandId,
-                CommandType = cmd.CommandType,
-                AgentId = cmd.AgentId,
-                ApplicationId = cmd.ApplicationId,
-                InstanceId = cmd.InstanceId,
-                Parameters = cmd.Parameters,
-                Timestamp = cmd.CreatedAt.Ticks
-            }).ToList();
-            
             return new StatusReportResponse
             {
                 Success = true,
-                Message = "Status report processed",
-                PendingCommands = { grpcCommands }
+                Message = "Status report processed"
             };
         }
         catch (Exception ex)
@@ -199,6 +185,10 @@ public class AgentGrpcServiceImpl : AgentService.AgentServiceBase
             
             // Register agent stream
             _connectedAgents[agentId] = (responseStream, DateTime.UtcNow);
+
+            // Streaming-only command delivery:
+            // Flush any queued (Pending) commands once on connect. New commands are pushed via TrySendCommandImmediately.
+            await SendPendingCommandsToAgentAsync(agentId, responseStream);
             
             // Process incoming messages
             await foreach (var message in requestStream.ReadAllAsync())
@@ -210,9 +200,6 @@ public class AgentGrpcServiceImpl : AgentService.AgentServiceBase
                 {
                     _connectedAgents[agentId] = (responseStream, DateTime.UtcNow);
                 }
-                
-                // Send any pending commands
-                await SendPendingCommandsToAgentAsync(agentId, responseStream);
             }
         }
         catch (RpcException rpcEx) when (rpcEx.StatusCode == StatusCode.Cancelled)

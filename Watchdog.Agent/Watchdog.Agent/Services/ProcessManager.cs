@@ -244,7 +244,7 @@ public class ProcessManager : IProcessManagerInternal
                 managedProcess.Process.Id, instanceId, force);
             
             // Update application manager
-            await _applicationManager.UpdateInstanceStatus(instanceId, ApplicationStatus.Stopping);
+            await _applicationManager.UpdateInstanceStatus(instanceId, Watchdog.Agent.Models.ApplicationStatus.Stopping);
             
             var process = managedProcess.Process;
             
@@ -534,7 +534,9 @@ public class ProcessManager : IProcessManagerInternal
                 managedProcess.Process.Id, managedProcess.InstanceId, exitCode);
             
             // Update application manager
-            var status = exitCode == 0 ? ApplicationStatus.Stopped : ApplicationStatus.Error;
+            var status = exitCode == 0 
+                ? Watchdog.Agent.Models.ApplicationStatus.Stopped 
+                : Watchdog.Agent.Models.ApplicationStatus.Error;
             await _applicationManager.UpdateInstanceStatus(
                 managedProcess.InstanceId,
                 status);

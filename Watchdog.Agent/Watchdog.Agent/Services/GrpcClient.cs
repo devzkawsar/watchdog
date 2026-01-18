@@ -19,15 +19,13 @@ internal interface IGrpcClientInternal : IGrpcClient
 
 public class GrpcClient : IGrpcClientInternal
 {
-    private readonly ControlPlaneService.ControlPlaneServiceClient _grpcClient;
+    private readonly AgentService.AgentServiceClient _grpcClient;
     private readonly ILogger<GrpcClient> _logger;
     private readonly IOptions<ControlPlaneSettings> _controlPlaneSettings;
     private readonly IOptions<AgentSettings> _agentSettings;
     private readonly IApplicationManager _applicationManager;
     private readonly IProcessManager _processManager;
-    private readonly ICommandExecutor _commandExecutor;
     
-    private GrpcChannel? _channel;
     private AsyncDuplexStreamingCall<AgentMessage, ControlPlaneMessage>? _stream;
     private CancellationTokenSource? _streamCts;
     private Task? _streamReceiveTask;
@@ -35,15 +33,81 @@ public class GrpcClient : IGrpcClientInternal
     private readonly object _connectionLock = new();
     private bool _isConnected = false;
     private int _reconnectAttempts = 0;
-    
+    private int _reconnectScheduled = 0;
+
+    private void CleanupStream()
+    {
+        try
+        {
+            _streamCts?.Cancel();
+        }
+        catch
+        {
+            // Ignore
+        }
+
+        try
+        {
+            _stream?.Dispose();
+        }
+        catch
+        {
+            // Ignore
+        }
+
+        _stream = null;
+        _streamReceiveTask = null;
+        _streamSendTask = null;
+        _streamCts = null;
+    }
+
+    private void TriggerReconnect(string reason, Exception? exception = null)
+    {
+        if (System.Threading.Interlocked.Exchange(ref _reconnectScheduled, 1) == 1)
+        {
+            return;
+        }
+
+        if (exception != null)
+        {
+            _logger.LogWarning(exception, "gRPC stream ended ({Reason}); reconnecting", reason);
+        }
+        else
+        {
+            _logger.LogWarning("gRPC stream ended ({Reason}); reconnecting", reason);
+        }
+
+        lock (_connectionLock)
+        {
+            _isConnected = false;
+        }
+
+        CleanupStream();
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await AttemptReconnect(CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Reconnect attempt failed");
+            }
+            finally
+            {
+                System.Threading.Interlocked.Exchange(ref _reconnectScheduled, 0);
+            }
+        });
+    }
+
     public GrpcClient(
-        ControlPlaneService.ControlPlaneServiceClient grpcClient,
+        AgentService.AgentServiceClient grpcClient,
         ILogger<GrpcClient> logger,
         IOptions<ControlPlaneSettings> controlPlaneSettings,
         IOptions<AgentSettings> agentSettings,
         IApplicationManager applicationManager,
-        IProcessManager processManager,
-        ICommandExecutor commandExecutor)
+        IProcessManager processManager)
     {
         _grpcClient = grpcClient;
         _logger = logger;
@@ -51,9 +115,8 @@ public class GrpcClient : IGrpcClientInternal
         _agentSettings = agentSettings;
         _applicationManager = applicationManager;
         _processManager = processManager;
-        _commandExecutor = commandExecutor;
     }
-    
+
     public async Task<bool> Connect(CancellationToken cancellationToken = default)
     {
         lock (_connectionLock)
@@ -61,44 +124,20 @@ public class GrpcClient : IGrpcClientInternal
             if (_isConnected)
                 return true;
         }
-        
+
         try
         {
             _logger.LogInformation("Connecting to control plane at {Endpoint}", 
                 _controlPlaneSettings.Value.GrpcEndpoint);
-            
-            // Create channel
-            _channel = GrpcChannel.ForAddress(_controlPlaneSettings.Value.GrpcEndpoint, new GrpcChannelOptions
-            {
-                HttpClient = new HttpClient
-                {
-                    Timeout = TimeSpan.FromSeconds(_controlPlaneSettings.Value.GrpcTimeoutSeconds)
-                },
-                DisposeHttpClient = false,
-                MaxReceiveMessageSize = 10 * 1024 * 1024, // 10MB
-                MaxSendMessageSize = 10 * 1024 * 1024, // 10MB
-                Credentials = ChannelCredentials.Insecure
-            });
-            
-            // Test connection
-            var healthCheck = await _grpcClient.HealthCheckAsync(
-                new HealthCheckRequest { AgentId = _agentSettings.Value.AgentId },
-                cancellationToken: cancellationToken);
-            
-            if (!healthCheck.Healthy)
-            {
-                _logger.LogWarning("Control plane health check failed: {Status}", healthCheck.Status);
-                return false;
-            }
-            
+
             lock (_connectionLock)
             {
                 _isConnected = true;
                 _reconnectAttempts = 0;
             }
-            
+
             _logger.LogInformation("Successfully connected to control plane");
-            
+
             // Register with control plane
             var registration = await Register(cancellationToken);
             if (registration == null || !registration.Success)
@@ -107,66 +146,54 @@ public class GrpcClient : IGrpcClientInternal
                 await Disconnect();
                 return false;
             }
-            
+
             // Update applications from control plane
             if (registration.Applications.Any())
             {
                 await _applicationManager.UpdateApplicationsFromControlPlane(
                     registration.Applications.ToList());
             }
-            
+
             // Start command streaming
             await StartCommandStreaming(cancellationToken);
-            
+
             return true;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to connect to control plane");
-            
+
             lock (_connectionLock)
             {
                 _isConnected = false;
             }
-            
+
             return false;
         }
     }
-    
+
     public async Task Disconnect()
     {
-        lock (_connectionLock)
-        {
-            if (!_isConnected)
-                return;
-            
-            _isConnected = false;
-        }
-        
         try
         {
-            // Cancel streaming tasks
-            _streamCts?.Cancel();
-            
+            lock (_connectionLock)
+            {
+                _isConnected = false;
+            }
+
             // Wait for tasks to complete
             if (_streamReceiveTask != null)
             {
                 await _streamReceiveTask.ContinueWith(t => { }, TaskContinuationOptions.OnlyOnRanToCompletion);
             }
-            
+
             if (_streamSendTask != null)
             {
                 await _streamSendTask.ContinueWith(t => { }, TaskContinuationOptions.OnlyOnRanToCompletion);
             }
-            
-            // Dispose stream
-            _stream?.Dispose();
-            _stream = null;
-            
-            // Dispose channel
-            _channel?.Dispose();
-            _channel = null;
-            
+
+            CleanupStream();
+
             _logger.LogInformation("Disconnected from control plane");
         }
         catch (Exception ex)
@@ -174,7 +201,7 @@ public class GrpcClient : IGrpcClientInternal
             _logger.LogError(ex, "Error during disconnect");
         }
     }
-    
+
     public Task<bool> IsConnected()
     {
         lock (_connectionLock)
@@ -182,7 +209,7 @@ public class GrpcClient : IGrpcClientInternal
             return Task.FromResult(_isConnected);
         }
     }
-    
+
     public async Task<AgentRegistrationResponse?> Register(CancellationToken cancellationToken = default)
     {
         try
@@ -197,17 +224,15 @@ public class GrpcClient : IGrpcClientInternal
                 CpuCores = Environment.ProcessorCount,
                 OsVersion = Environment.OSVersion.ToString()
             };
-            
-            request.Tags.AddRange(_agentSettings.Value.Tags);
-            
+
             var response = await _grpcClient.RegisterAgentAsync(request, 
                 cancellationToken: cancellationToken);
-            
+
             _logger.LogInformation(
                 "Registration {Status}: {Message}", 
                 response.Success ? "successful" : "failed", 
                 response.Message);
-            
+
             return response;
         }
         catch (Exception ex)
@@ -216,25 +241,14 @@ public class GrpcClient : IGrpcClientInternal
             return null;
         }
     }
-    
+
     public async Task<bool> ReportStatus(StatusReportRequest request, CancellationToken cancellationToken = default)
     {
         try
         {
             var response = await _grpcClient.ReportStatusAsync(request, 
                 cancellationToken: cancellationToken);
-            
-            if (response.Success && response.PendingCommands.Any())
-            {
-                _logger.LogDebug("Received {Count} pending commands", response.PendingCommands.Count);
-                
-                // Process pending commands
-                foreach (var command in response.PendingCommands)
-                {
-                    await _commandExecutor.ExecuteCommand(command, cancellationToken);
-                }
-            }
-            
+
             return response.Success;
         }
         catch (Exception ex)
@@ -243,34 +257,7 @@ public class GrpcClient : IGrpcClientInternal
             return false;
         }
     }
-    
-    public async Task<bool> SendMetrics(MetricsReport report, CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            var message = new AgentMessage
-            {
-                Metrics = report
-            };
-            
-            if (_stream != null)
-            {
-                await _stream.RequestStream.WriteAsync(message, cancellationToken);
-                return true;
-            }
-            else
-            {
-                _logger.LogWarning("gRPC stream not available for sending metrics");
-                return false;
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to send metrics");
-            return false;
-        }
-    }
-    
+
     public async Task<bool> SendHeartbeat(CancellationToken cancellationToken = default)
     {
         try
@@ -280,12 +267,12 @@ public class GrpcClient : IGrpcClientInternal
                 AgentId = _agentSettings.Value.AgentId,
                 Timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
             };
-            
+
             var message = new AgentMessage
             {
                 Heartbeat = heartbeat
             };
-            
+
             if (_stream != null)
             {
                 await _stream.RequestStream.WriteAsync(message, cancellationToken);
@@ -297,13 +284,26 @@ public class GrpcClient : IGrpcClientInternal
                 return false;
             }
         }
+        catch (RpcException rpcEx)
+        {
+            // When the server ends the stream, gRPC can throw during write.
+            // In some cases this surfaces as StatusCode=OK (stream completed).
+            TriggerReconnect($"heartbeat write failed ({rpcEx.StatusCode})", rpcEx);
+            return false;
+        }
+        catch (InvalidOperationException invEx)
+        {
+            // Typically thrown if writing after CompleteAsync / stream already ended
+            TriggerReconnect("heartbeat write invalid operation", invEx);
+            return false;
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to send heartbeat");
+            TriggerReconnect("heartbeat write exception", ex);
             return false;
         }
     }
-    
+
     public async Task<bool> SendApplicationSpawned(ApplicationSpawned spawned, CancellationToken cancellationToken = default)
     {
         try
@@ -312,15 +312,15 @@ public class GrpcClient : IGrpcClientInternal
             {
                 Spawned = spawned
             };
-            
+
             if (_stream != null)
             {
                 await _stream.RequestStream.WriteAsync(message, cancellationToken);
-                
+
                 _logger.LogInformation(
                     "Reported application spawned: {InstanceId} (PID: {ProcessId})",
                     spawned.InstanceId, spawned.ProcessId);
-                
+
                 return true;
             }
             else
@@ -335,7 +335,7 @@ public class GrpcClient : IGrpcClientInternal
             return false;
         }
     }
-    
+
     public async Task<bool> SendApplicationStopped(ApplicationStopped stopped, CancellationToken cancellationToken = default)
     {
         try
@@ -344,15 +344,15 @@ public class GrpcClient : IGrpcClientInternal
             {
                 Stopped = stopped
             };
-            
+
             if (_stream != null)
             {
                 await _stream.RequestStream.WriteAsync(message, cancellationToken);
-                
+
                 _logger.LogInformation(
                     "Reported application stopped: {InstanceId} (Exit code: {ExitCode})",
                     stopped.InstanceId, stopped.ExitCode);
-                
+
                 return true;
             }
             else
@@ -367,7 +367,7 @@ public class GrpcClient : IGrpcClientInternal
             return false;
         }
     }
-    
+
     public async Task<bool> SendError(ErrorReport error, CancellationToken cancellationToken = default)
     {
         try
@@ -376,15 +376,15 @@ public class GrpcClient : IGrpcClientInternal
             {
                 Error = error
             };
-            
+
             if (_stream != null)
             {
                 await _stream.RequestStream.WriteAsync(message, cancellationToken);
-                
+
                 _logger.LogError(
                     "Reported error to control plane: {ErrorType} - {ErrorMessage}",
                     error.ErrorType, error.ErrorMessage);
-                
+
                 return true;
             }
             else
@@ -399,24 +399,24 @@ public class GrpcClient : IGrpcClientInternal
             return false;
         }
     }
-    
+
     public Task StartCommandStreaming(CancellationToken cancellationToken = default)
     {
         try
         {
             _streamCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            
+
             // Start bi-directional stream
             _stream = _grpcClient.CommandStream(cancellationToken: _streamCts.Token);
-            
+
             // Start receiving commands
             _streamReceiveTask = Task.Run(async () => 
                 await ReceiveCommands(_streamCts.Token), _streamCts.Token);
-            
+
             // Start sending heartbeats
             _streamSendTask = Task.Run(async () => 
                 await SendHeartbeats(_streamCts.Token), _streamCts.Token);
-            
+
             _logger.LogInformation("Started gRPC command streaming");
         }
         catch (Exception ex)
@@ -427,7 +427,7 @@ public class GrpcClient : IGrpcClientInternal
 
         return Task.CompletedTask;
     }
-    
+
     private async Task ReceiveCommands(CancellationToken cancellationToken)
     {
         try
@@ -436,37 +436,55 @@ public class GrpcClient : IGrpcClientInternal
             {
                 await ProcessControlMessage(controlMessage, cancellationToken);
             }
+
+            // Stream completed normally
+            TriggerReconnect("response stream completed");
         }
         catch (RpcException rpcEx) when (rpcEx.StatusCode == StatusCode.Cancelled)
         {
             _logger.LogInformation("Command stream cancelled");
         }
+        catch (RpcException rpcEx)
+        {
+            TriggerReconnect($"response stream rpc exception ({rpcEx.StatusCode})", rpcEx);
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error in command stream");
-            
-            // Attempt to reconnect
-            await AttemptReconnect(cancellationToken);
+            TriggerReconnect("response stream exception", ex);
         }
     }
-    
+
     private async Task SendHeartbeats(CancellationToken cancellationToken)
     {
         while (!cancellationToken.IsCancellationRequested)
         {
             try
             {
-                await SendHeartbeat(cancellationToken);
+                var sent = await SendHeartbeat(cancellationToken);
+                if (!sent)
+                {
+                    return;
+                }
                 await Task.Delay(TimeSpan.FromSeconds(30), cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                // Normal shutdown
+                return;
+            }
+            catch (TaskCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                // Normal shutdown
+                return;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error sending heartbeat");
-                await Task.Delay(TimeSpan.FromSeconds(10), cancellationToken);
+                TriggerReconnect("heartbeat loop exception", ex);
+                return;
             }
         }
     }
-    
+
     private Task ProcessControlMessage(ControlPlaneMessage message, CancellationToken cancellationToken)
     {
         try
@@ -481,12 +499,6 @@ public class GrpcClient : IGrpcClientInternal
                     
                 case ControlPlaneMessage.MessageOneofCase.Restart:
                     return ProcessRestartCommand(message.Restart, cancellationToken);
-                    
-                case ControlPlaneMessage.MessageOneofCase.Update:
-                    return ProcessUpdateCommand(message.Update, cancellationToken);
-                    
-                case ControlPlaneMessage.MessageOneofCase.Config:
-                    return ProcessConfigurationUpdate(message.Config, cancellationToken);
                     
                 default:
                     _logger.LogWarning("Received unknown control message type: {Type}", message.MessageCase);
@@ -518,8 +530,8 @@ public class GrpcClient : IGrpcClientInternal
         // Create application instance
         var instance = await _applicationManager.CreateApplicationInstance(command);
         
-        // Allocate ports
-        var ports = await AllocatePorts(command.Ports.ToList());
+        // Ports are provided as PortMapping in the control-plane contract
+        var ports = command.Ports.ToList();
         
         // Spawn process
         var result = await _processManager.SpawnProcess(command, ports);
@@ -529,7 +541,7 @@ public class GrpcClient : IGrpcClientInternal
             // Update instance status
             await _applicationManager.UpdateInstanceStatus(
                 command.InstanceId,
-                ApplicationStatus.Running,
+                Watchdog.Agent.Models.ApplicationStatus.Running,
                 result.ProcessId,
                 result.Ports);
             
@@ -552,7 +564,7 @@ public class GrpcClient : IGrpcClientInternal
             // Update instance status
             await _applicationManager.UpdateInstanceStatus(
                 command.InstanceId,
-                ApplicationStatus.Error);
+                Watchdog.Agent.Models.ApplicationStatus.Error);
             
             // Report error to control plane
             await SendError(new ErrorReport
@@ -636,43 +648,6 @@ public class GrpcClient : IGrpcClientInternal
         // and possibly restart the application
 
         return Task.CompletedTask;
-    }
-    
-    private Task ProcessConfigurationUpdate(ConfigurationUpdate config, CancellationToken cancellationToken)
-    {
-        _logger.LogInformation("Processing configuration update");
-        
-        try
-        {
-            // Update configuration
-            // This would involve updating appsettings and restarting certain services
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to process configuration update");
-        }
-
-        return Task.CompletedTask;
-    }
-    
-    private Task<List<PortMapping>> AllocatePorts(List<PortAssignment> portAssignments)
-    {
-        var ports = new List<PortMapping>();
-        
-        foreach (var assignment in portAssignments)
-        {
-            var portMapping = new PortMapping
-            {
-                Name = assignment.Name,
-                InternalPort = assignment.InternalPort,
-                ExternalPort = assignment.ExternalPort,
-                Protocol = assignment.Protocol
-            };
-            
-            ports.Add(portMapping);
-        }
-        
-        return Task.FromResult(ports);
     }
     
     private async Task AttemptReconnect(CancellationToken cancellationToken)

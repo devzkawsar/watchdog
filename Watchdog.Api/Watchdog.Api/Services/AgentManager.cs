@@ -201,7 +201,12 @@ public class AgentManager : IAgentManager
         using var connection = _connectionFactory.CreateConnection();
         
         const string sql = @"
-            SELECT a.*
+            SELECT 
+                a.Id, a.Name, a.DisplayName, a.ExecutablePath, a.Arguments, a.WorkingDirectory,
+                a.ApplicationType, a.HealthCheckUrl, a.HealthCheckInterval,
+                a.DesiredInstances, a.MinInstances, a.MaxInstances,
+                a.PortRequirements AS PortRequirementsJson, a.EnvironmentVariables AS EnvironmentVariablesJson, a.AutoStart,
+                a.CreatedAt, a.UpdatedAt
             FROM Applications a
             INNER JOIN AgentApplications aa ON a.Id = aa.ApplicationId
             WHERE aa.AgentId = @AgentId

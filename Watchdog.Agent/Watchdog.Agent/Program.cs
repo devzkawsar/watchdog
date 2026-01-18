@@ -16,6 +16,7 @@ public class Program
 {
     public static void Main(string[] args)
     {
+        AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport", true);
         CreateHostBuilder(args).Build().Run();
     }
 
@@ -52,7 +53,7 @@ public class Program
                 services.AddSingleton<IHealthChecker, HealthChecker>();
                 services.AddSingleton<ICommandExecutor, CommandExecutor>();
                 services.AddSingleton<IMetricsCollector, MetricsCollector>();
-                services.AddSingleton<Watchdog.Agent.Services.IConfigurationManagerInternal, Watchdog.Agent.Services.ConfigurationManager>();
+                services.AddSingleton<Watchdog.Agent.Interface.IConfigurationManager, Watchdog.Agent.Services.ConfigurationManager>();
                 
                 // Hosted service
                 services.AddHostedService<AgentWorker>();
@@ -69,7 +70,7 @@ public class Program
                 });
                 
                 // gRPC Client
-                services.AddGrpcClient<ControlPlaneService.ControlPlaneServiceClient>((serviceProvider, options) =>
+                services.AddGrpcClient<AgentService.AgentServiceClient>((serviceProvider, options) =>
                 {
                     var config = serviceProvider.GetRequiredService<IOptions<ControlPlaneSettings>>().Value;
                     options.Address = new Uri(config.GrpcEndpoint);

@@ -27,6 +27,7 @@ public class MonitorService : IMonitorServiceInternal
     private readonly IHealthChecker _healthChecker;
     private readonly ILogger<MonitorService> _logger;
     private readonly IOptions<MonitoringSettings> _monitoringSettings;
+    private readonly IOptions<AgentSettings> _agentSettings;
     
     private Timer? _metricsTimer;
     private Timer? _healthCheckTimer;
@@ -40,7 +41,8 @@ public class MonitorService : IMonitorServiceInternal
         IGrpcClient grpcClient,
         IHealthChecker healthChecker,
         ILogger<MonitorService> logger,
-        IOptions<MonitoringSettings> monitoringSettings)
+        IOptions<MonitoringSettings> monitoringSettings,
+        IOptions<AgentSettings> agentSettings)
     {
         _processManager = processManager;
         _applicationManager = applicationManager;
@@ -48,6 +50,7 @@ public class MonitorService : IMonitorServiceInternal
         _healthChecker = healthChecker;
         _logger = logger;
         _monitoringSettings = monitoringSettings;
+        _agentSettings = agentSettings;
     }
     
     public Task Start(CancellationToken cancellationToken)
@@ -121,7 +124,7 @@ public class MonitorService : IMonitorServiceInternal
             
             foreach (var instance in instances)
             {
-                if (instance.Status == ApplicationStatus.Running && instance.ProcessId.HasValue)
+                if (instance.Status == Watchdog.Agent.Models.ApplicationStatus.Running && instance.ProcessId.HasValue)
                 {
                     var metrics = await _processManager.GetProcessMetrics(instance.InstanceId);
                     if (metrics != null)
@@ -184,7 +187,7 @@ public class MonitorService : IMonitorServiceInternal
         try
         {
             var instances = await _applicationManager.GetAllInstances();
-            var runningInstances = instances.Where(i => i.Status == ApplicationStatus.Running);
+            var runningInstances = instances.Where(i => i.Status == Watchdog.Agent.Models.ApplicationStatus.Running);
             
             foreach (var instance in runningInstances)
             {
@@ -207,7 +210,7 @@ public class MonitorService : IMonitorServiceInternal
                     // Update instance status
                     await _applicationManager.UpdateInstanceStatus(
                         instance.InstanceId,
-                        ApplicationStatus.Unhealthy);
+                        Watchdog.Agent.Models.ApplicationStatus.Unhealthy);
                 }
                 else
                 {
@@ -278,35 +281,9 @@ public class MonitorService : IMonitorServiceInternal
             if (!_isRunning)
                 return;
             
-            // Collect metrics
-            var metrics = await CollectMetrics();
-            
-            // Build metrics report
-            var systemMetrics = await GetSystemMetrics();
-            var metricsReport = new MetricsReport
-            {
-                AgentId = Environment.MachineName,
-                Timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
-                SystemMetrics = systemMetrics
-            };
-            
-            foreach (var metric in metrics)
-            {
-                var appMetric = new Watchdog.Agent.Protos.ApplicationMetrics
-                {
-                    InstanceId = "unknown", // Would need instance ID mapping
-                    CpuPercent = metric.CpuPercent,
-                    MemoryMb = metric.MemoryMB,
-                    ThreadCount = metric.ThreadCount,
-                    HandleCount = metric.HandleCount,
-                    IoReadBytes = metric.IoReadBytes,
-                    IoWriteBytes = metric.IoWriteBytes
-                };
-                metricsReport.ApplicationMetrics.Add(appMetric);
-            }
-            
-            // Send metrics via gRPC if connected
-            await _grpcClient.SendMetrics(metricsReport);
+            // Collect metrics and store on instances.
+            // Metrics are sent to the control plane as part of StatusReportRequest (SystemMetrics + per-instance CPU/Memory).
+            await CollectMetrics();
             
         }
         catch (Exception ex)
@@ -361,15 +338,17 @@ public class MonitorService : IMonitorServiceInternal
         try
         {
             // Check if instance is supposed to be running
-            if (instance.Status == ApplicationStatus.Running)
+            if (instance.Status == Watchdog.Agent.Models.ApplicationStatus.Running)
             {
                 // Check if process is still running
                 var isRunning = await _processManager.IsProcessRunning(instance.InstanceId);
                 if (!isRunning)
                 {
+                    await _applicationManager.UpdateInstanceStatus(instance.InstanceId, Watchdog.Agent.Models.ApplicationStatus.Error);
                     detection.IsFailure = true;
                     detection.Reason = "Process is not running";
                     detection.FailureType = FailureType.ProcessExited;
+                    detection.ShouldRestart = true;
                     return detection;
                 }
                 
@@ -377,9 +356,11 @@ public class MonitorService : IMonitorServiceInternal
                 var isHealthy = await CheckHealth(instance.InstanceId);
                 if (!isHealthy)
                 {
+                    await _applicationManager.UpdateInstanceStatus(instance.InstanceId, Watchdog.Agent.Models.ApplicationStatus.Unhealthy);
                     detection.IsFailure = true;
                     detection.Reason = "Health check failed";
                     detection.FailureType = FailureType.HealthCheckFailed;
+                    detection.ShouldRestart = true;
                     return detection;
                 }
                 
@@ -389,20 +370,24 @@ public class MonitorService : IMonitorServiceInternal
                 {
                     if (metrics.CpuPercent > _monitoringSettings.Value.MaxCpuThreshold)
                     {
+                        await _applicationManager.UpdateInstanceStatus(instance.InstanceId, Watchdog.Agent.Models.ApplicationStatus.Unhealthy);
                         detection.IsFailure = true;
                         detection.Reason = $"CPU usage too high: {metrics.CpuPercent}%";
                         detection.FailureType = FailureType.ResourceExceeded;
                         detection.Metrics = metrics;
+                        detection.ShouldRestart = true;
                         return detection;
                     }
                     
                     if (metrics.MemoryMB > _monitoringSettings.Value.MaxMemoryThreshold)
                     {
                         // Need total memory to calculate percentage
+                        await _applicationManager.UpdateInstanceStatus(instance.InstanceId, Watchdog.Agent.Models.ApplicationStatus.Unhealthy);
                         detection.IsFailure = true;
                         detection.Reason = $"Memory usage too high: {metrics.MemoryMB}MB";
                         detection.FailureType = FailureType.ResourceExceeded;
                         detection.Metrics = metrics;
+                        detection.ShouldRestart = true;
                         return detection;
                     }
                 }
@@ -413,14 +398,16 @@ public class MonitorService : IMonitorServiceInternal
                     var timeSinceLastCheck = DateTime.UtcNow - instance.LastHealthCheck.Value;
                     if (timeSinceLastCheck > TimeSpan.FromMinutes(5))
                     {
+                        await _applicationManager.UpdateInstanceStatus(instance.InstanceId, Watchdog.Agent.Models.ApplicationStatus.Unhealthy);
                         detection.IsFailure = true;
                         detection.Reason = "No activity for 5 minutes";
                         detection.FailureType = FailureType.HungProcess;
+                        detection.ShouldRestart = true;
                         return detection;
                     }
                 }
             }
-            else if (instance.Status == ApplicationStatus.Error || instance.Status == ApplicationStatus.Stopped)
+            else if (instance.Status == Watchdog.Agent.Models.ApplicationStatus.Error || instance.Status == Watchdog.Agent.Models.ApplicationStatus.Stopped)
             {
                 // Check if we should restart this instance
                 var shouldRestart = await _applicationManager.ShouldRestartInstance(instance);
@@ -429,6 +416,18 @@ public class MonitorService : IMonitorServiceInternal
                     detection.IsFailure = true;
                     detection.Reason = "Instance stopped and requires restart";
                     detection.FailureType = FailureType.Stopped;
+                    detection.ShouldRestart = true;
+                    return detection;
+                }
+            }
+            else if (instance.Status == Watchdog.Agent.Models.ApplicationStatus.Unhealthy)
+            {
+                var shouldRestart = await _applicationManager.ShouldRestartInstance(instance);
+                if (shouldRestart)
+                {
+                    detection.IsFailure = true;
+                    detection.Reason = "Instance unhealthy and requires restart";
+                    detection.FailureType = FailureType.HealthCheckFailed;
                     detection.ShouldRestart = true;
                     return detection;
                 }
@@ -452,78 +451,32 @@ public class MonitorService : IMonitorServiceInternal
             _logger.LogWarning(
                 "Handling failure for instance {InstanceId}: {Reason}",
                 failure.InstanceId, failure.Reason);
-            
-            switch (failure.FailureType)
+
+            // Agent-only execution mode: do NOT take autonomous action (restart/respawn).
+            // Instead, report failures to the control plane and let it decide.
+            var instance = await _applicationManager.GetApplicationInstance(failure.InstanceId);
+            if (instance != null)
             {
-                case FailureType.ProcessExited:
-                case FailureType.HealthCheckFailed:
-                case FailureType.ResourceExceeded:
-                case FailureType.HungProcess:
-                    if (failure.ShouldRestart)
-                    {
-                        await HandleRestart(failure);
-                    }
-                    break;
-                    
-                case FailureType.Stopped:
-                    await HandleRestart(failure);
-                    break;
-                    
-                case FailureType.DetectionError:
-                    // Just log, don't take action
-                    break;
+                if (!string.IsNullOrWhiteSpace(failure.Reason) && string.Equals(instance.LastError, failure.Reason, StringComparison.Ordinal))
+                {
+                    return;
+                }
+
+                instance.LastError = failure.Reason;
             }
+
+            await _grpcClient.SendError(new ErrorReport
+            {
+                AgentId = _agentSettings.Value.AgentId,
+                ErrorType = failure.FailureType.ToString(),
+                ErrorMessage = failure.Reason ?? "Failure detected",
+                StackTrace = string.Empty,
+                Timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
+            });
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error handling failure for instance {InstanceId}", failure.InstanceId);
-        }
-    }
-    
-    private async Task HandleRestart(FailureDetection failure)
-    {
-        try
-        {
-            // Increment restart count
-            await _applicationManager.IncrementRestartCount(failure.InstanceId);
-            
-            // Check if we should restart
-            var instance = await _applicationManager.GetApplicationInstance(failure.InstanceId);
-            if (instance == null)
-                return;
-            
-            var shouldRestart = await _applicationManager.ShouldRestartInstance(instance);
-            if (!shouldRestart)
-            {
-                _logger.LogWarning(
-                    "Instance {InstanceId} has reached maximum restart attempts",
-                    failure.InstanceId);
-                return;
-            }
-            
-            // Restart the process
-            _logger.LogInformation(
-                "Restarting instance {InstanceId} (attempt {Attempt})",
-                failure.InstanceId, instance.RestartCount);
-            
-            var success = await _processManager.RestartProcess(failure.InstanceId);
-            
-            if (success)
-            {
-                _logger.LogInformation(
-                    "Successfully restarted instance {InstanceId}",
-                    failure.InstanceId);
-            }
-            else
-            {
-                _logger.LogError(
-                    "Failed to restart instance {InstanceId}",
-                    failure.InstanceId);
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error restarting instance {InstanceId}", failure.InstanceId);
         }
     }
     
@@ -541,12 +494,7 @@ public class MonitorService : IMonitorServiceInternal
                 MemoryPercent = memoryInfo.UsedPercentage,
                 DiskPercent = diskInfo.UsedPercentage,
                 TotalProcesses = Process.GetProcesses().Length,
-                UptimeSeconds = (long)(DateTime.UtcNow - Process.GetCurrentProcess().StartTime).TotalSeconds,
-                TotalMemoryMb = memoryInfo.TotalMB,
-                AvailableMemoryMb = memoryInfo.AvailableMB,
-                TotalDiskGb = diskInfo.TotalGB,
-                AvailableDiskGb = diskInfo.AvailableGB,
-                NetworkInterfaces = NetworkInterface.GetAllNetworkInterfaces().Length
+                UptimeSeconds = (long)(DateTime.UtcNow - Process.GetCurrentProcess().StartTime).TotalSeconds
             };
         }
         catch

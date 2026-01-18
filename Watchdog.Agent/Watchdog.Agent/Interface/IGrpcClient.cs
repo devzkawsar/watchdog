@@ -9,7 +9,6 @@ public interface IGrpcClient
     Task<bool> IsConnected();
     Task<AgentRegistrationResponse?> Register(CancellationToken cancellationToken = default);
     Task<bool> ReportStatus(StatusReportRequest request, CancellationToken cancellationToken = default);
-    Task<bool> SendMetrics(MetricsReport report, CancellationToken cancellationToken = default);
     Task<bool> SendHeartbeat(CancellationToken cancellationToken = default);
     Task<bool> SendApplicationSpawned(ApplicationSpawned spawned, CancellationToken cancellationToken = default);
     Task<bool> SendApplicationStopped(ApplicationStopped stopped, CancellationToken cancellationToken = default);

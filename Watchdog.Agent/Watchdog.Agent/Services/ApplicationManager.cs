@@ -137,7 +137,7 @@ namespace Watchdog.Agent.Services
                     SystemMetrics = systemMetrics
                 };
                 
-                statusRequest.Instances.AddRange(instanceStatuses);
+                statusRequest.ApplicationStatuses.AddRange(instanceStatuses);
                 
                 var grpcClient = _serviceProvider.GetRequiredService<IGrpcClient>();
                 await grpcClient.ReportStatus(statusRequest);
@@ -205,15 +205,12 @@ namespace Watchdog.Agent.Services
                     {
                         instance.StartedAt = DateTime.UtcNow;
                         instance.LastHealthCheck = DateTime.UtcNow;
+                        instance.RestartCount = 0;
+                        instance.LastRestartAttempt = null;
                     }
                     else if (status == Watchdog.Agent.Models.ApplicationStatus.Stopped || status == Watchdog.Agent.Models.ApplicationStatus.Error)
                     {
                         instance.StoppedAt = DateTime.UtcNow;
-                    }
-                    
-                    if (status == Watchdog.Agent.Models.ApplicationStatus.Error || status == Watchdog.Agent.Models.ApplicationStatus.Stopped)
-                    {
-                        instance.RestartCount = 0;
                     }
                 }
                 
@@ -239,15 +236,15 @@ namespace Watchdog.Agent.Services
             }
         }
         
-        public async Task<List<ApplicationInstanceStatus>> GetInstanceStatuses()
+        public async Task<List<Watchdog.Agent.Protos.ApplicationStatus>> GetInstanceStatuses()
         {
-            var statuses = new List<ApplicationInstanceStatus>();
+            var statuses = new List<Watchdog.Agent.Protos.ApplicationStatus>();
             
             foreach (var instance in _instances.Values)
             {
                 try
                 {
-                    var status = new ApplicationInstanceStatus
+                    var status = new Watchdog.Agent.Protos.ApplicationStatus
                     {
                         InstanceId = instance.InstanceId,
                         ApplicationId = instance.ApplicationId,
@@ -256,8 +253,6 @@ namespace Watchdog.Agent.Services
                         StartTime = instance.StartedAt.HasValue
                             ? new DateTimeOffset(instance.StartedAt.Value).ToUnixTimeSeconds()
                             : 0,
-                        UptimeSeconds = instance.StartedAt.HasValue ? 
-                            (long)(DateTimeOffset.UtcNow - new DateTimeOffset(instance.StartedAt.Value)).TotalSeconds : 0,
                         HealthStatus = await GetInstanceHealthStatus(instance)
                     };
                     
@@ -309,9 +304,7 @@ namespace Watchdog.Agent.Services
                         EnvironmentVariables = assignment.EnvironmentVariables.ToDictionary(
                             kvp => kvp.Key, kvp => kvp.Value),
                         HealthCheckUrl = assignment.HealthCheckUrl,
-                        HealthCheckInterval = assignment.HealthCheckInterval,
-                        MaxRestartAttempts = assignment.MaxRestartAttempts,
-                        RestartDelaySeconds = assignment.RestartDelaySeconds
+                        HealthCheckInterval = assignment.HealthCheckInterval
                     };
                     
                     _applications[config.Id] = config;
@@ -339,10 +332,20 @@ namespace Watchdog.Agent.Services
         public Task<bool> ShouldRestartInstance(Watchdog.Agent.Models.ManagedApplication instance)
         {
             if (instance.Status != Watchdog.Agent.Models.ApplicationStatus.Error && 
-                instance.Status != Watchdog.Agent.Models.ApplicationStatus.Stopped)
+                instance.Status != Watchdog.Agent.Models.ApplicationStatus.Stopped &&
+                instance.Status != Watchdog.Agent.Models.ApplicationStatus.Unhealthy)
                 return Task.FromResult(false);
-            
-            if (instance.RestartCount >= _monitoringSettings.Value.MaxRestartAttempts)
+
+            _applications.TryGetValue(instance.ApplicationId, out var appConfig);
+            var maxRestartAttempts = appConfig?.MaxRestartAttempts > 0
+                ? appConfig!.MaxRestartAttempts
+                : _monitoringSettings.Value.MaxRestartAttempts;
+
+            var restartDelaySeconds = appConfig?.RestartDelaySeconds > 0
+                ? appConfig!.RestartDelaySeconds
+                : _monitoringSettings.Value.RestartDelaySeconds;
+
+            if (instance.RestartCount >= maxRestartAttempts)
             {
                 _logger.LogWarning(
                     "Instance {InstanceId} has reached maximum restart attempts ({Attempts})",
@@ -354,7 +357,7 @@ namespace Watchdog.Agent.Services
             if (instance.LastRestartAttempt.HasValue)
             {
                 var timeSinceLastAttempt = DateTime.UtcNow - instance.LastRestartAttempt.Value;
-                if (timeSinceLastAttempt < TimeSpan.FromSeconds(_monitoringSettings.Value.RestartDelaySeconds))
+                if (timeSinceLastAttempt < TimeSpan.FromSeconds(restartDelaySeconds))
                     return Task.FromResult(false);
             }
             
