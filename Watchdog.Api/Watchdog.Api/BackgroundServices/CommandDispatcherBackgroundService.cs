@@ -29,8 +29,6 @@ public class CommandDispatcherBackgroundService : BackgroundService
         _logger.LogInformation("Command dispatcher background service started");
 
         // Streaming-only command delivery mode:
-        // Commands are pushed to agents via gRPC CommandStream / AgentGrpcServiceImpl.
-        // This background dispatcher is intentionally disabled to avoid double-delivery.
         await Task.Delay(Timeout.InfiniteTimeSpan, stoppingToken);
     }
     

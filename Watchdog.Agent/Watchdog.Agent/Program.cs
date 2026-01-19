@@ -1,7 +1,3 @@
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.Runtime.Versioning;
 using Watchdog.Agent.Configuration;
@@ -9,6 +5,8 @@ using Watchdog.Agent.Interface;
 using Watchdog.Agent.Protos;
 using Watchdog.Agent.Services;
 using Watchdog.Agent.WindowsService;
+using ConfigurationManager = Watchdog.Agent.Services.ConfigurationManager;
+using IConfigurationManager = Watchdog.Agent.Interface.IConfigurationManager;
 
 namespace Watchdog.Agent;
 
@@ -53,7 +51,7 @@ public class Program
                 services.AddSingleton<IHealthChecker, HealthChecker>();
                 services.AddSingleton<ICommandExecutor, CommandExecutor>();
                 services.AddSingleton<IMetricsCollector, MetricsCollector>();
-                services.AddSingleton<Watchdog.Agent.Interface.IConfigurationManager, Watchdog.Agent.Services.ConfigurationManager>();
+                services.AddSingleton<IConfigurationManager, ConfigurationManager>();
                 
                 // Hosted service
                 services.AddHostedService<AgentWorker>();
