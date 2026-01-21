@@ -8,6 +8,7 @@ namespace Watchdog.Agent.WindowsService;
 public class AgentWorker : BackgroundService
 {
     private readonly IApplicationManager _applicationManager;
+    private readonly IProcessManager _processManager;
     private readonly IMonitorService _monitorService;
     private readonly IGrpcClient _grpcClient;
     private readonly ILogger<AgentWorker> _logger;
@@ -21,6 +22,7 @@ public class AgentWorker : BackgroundService
     
     public AgentWorker(
         IApplicationManager applicationManager,
+        IProcessManager processManager,
         IMonitorService monitorService,
         IGrpcClient grpcClient,
         ILogger<AgentWorker> logger,
@@ -28,6 +30,7 @@ public class AgentWorker : BackgroundService
         IOptions<ControlPlaneSettings> controlPlaneSettings)
     {
         _applicationManager = applicationManager;
+        _processManager = processManager;
         _monitorService = monitorService;
         _grpcClient = grpcClient;
         _logger = logger;
@@ -44,6 +47,9 @@ public class AgentWorker : BackgroundService
             // Initialize application manager
             await _applicationManager.Initialize();
             
+            // Reattach to any existing processes for instances loaded from state
+            await _processManager.ReattachProcesses();
+            
             // Auto-register if configured
             if (_agentSettings.Value.AutoRegister)
             {
@@ -52,6 +58,10 @@ public class AgentWorker : BackgroundService
             
             // Start monitoring service
             await _monitorService.Start(stoppingToken);
+            
+            // On startup, immediately detect failures so any assigned instances
+            // without a running process are reported to the control plane as stopped.
+            await _monitorService.DetectFailures();
             
             // Start status reporting timer (every 5 seconds)
             _statusReportTimer = new Timer(
@@ -71,22 +81,22 @@ public class AgentWorker : BackgroundService
             _logger.LogInformation("Watchdog Agent worker started successfully");
             
             // Main loop
-            while (!stoppingToken.IsCancellationRequested && _isRunning)
-            {
-                try
-                {
-                    await Task.Delay(TimeSpan.FromSeconds(1), stoppingToken);
-                }
-                catch (OperationCanceledException)
-                {
-                    break;
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Error in agent worker main loop");
-                    await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken);
-                }
-            }
+            // while (!stoppingToken.IsCancellationRequested && _isRunning)
+            // {
+            //     try
+            //     {
+            //         await Task.Delay(TimeSpan.FromSeconds(1), stoppingToken);
+            //     }
+            //     catch (OperationCanceledException)
+            //     {
+            //         break;
+            //     }
+            //     catch (Exception ex)
+            //     {
+            //         _logger.LogError(ex, "Error in agent worker main loop");
+            //         await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken);
+            //     }
+            // }
         }
         catch (Exception ex)
         {

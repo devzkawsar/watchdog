@@ -16,24 +16,22 @@ public class AgentGrpcServiceImpl : AgentService.AgentServiceBase
     private readonly IAgentManager _agentManager;
     private readonly IApplicationManager _applicationManager;
     private readonly ICommandService _commandService;
+    private readonly IAgentGrpcService _agentGrpcService;
     private readonly ILogger<AgentGrpcServiceImpl> _logger;
-    
-    // Track connected agents
-    private static readonly ConcurrentDictionary<string, 
-        (IServerStreamWriter<ControlPlaneMessage> Stream, DateTime LastSeen)> 
-        _connectedAgents = new();
-    
+
     public AgentGrpcServiceImpl(
         IDbConnectionFactory connectionFactory,
         IAgentManager agentManager,
         IApplicationManager applicationManager,
         ICommandService commandService,
+        IAgentGrpcService agentGrpcService,
         ILogger<AgentGrpcServiceImpl> logger)
     {
         _connectionFactory = connectionFactory;
         _agentManager = agentManager;
         _applicationManager = applicationManager;
         _commandService = commandService;
+        _agentGrpcService = agentGrpcService;
         _logger = logger;
     }
     
@@ -184,22 +182,18 @@ public class AgentGrpcServiceImpl : AgentService.AgentServiceBase
             _logger.LogInformation("Agent {AgentId} connected via streaming", agentId);
             
             // Register agent stream
-            _connectedAgents[agentId] = (responseStream, DateTime.UtcNow);
+            var connectionId = context.Peer; // Use Peer as connection ID
+            _agentGrpcService.RegisterAgentConnection(agentId, responseStream, connectionId);
 
             // Streaming-only command delivery:
-            // Flush any queued (Pending) commands once on connect. New commands are pushed via TrySendCommandImmediately.
+            // Flush any queued (Pending) commands once on connect.
             await SendPendingCommandsToAgentAsync(agentId, responseStream);
             
             // Process incoming messages
             await foreach (var message in requestStream.ReadAllAsync())
             {
                 await ProcessAgentMessageAsync(agentId, message);
-                
-                // Update last seen
-                if (_connectedAgents.ContainsKey(agentId))
-                {
-                    _connectedAgents[agentId] = (responseStream, DateTime.UtcNow);
-                }
+                await _agentGrpcService.ProcessAgentMessageAsync(agentId, message);
             }
         }
         catch (RpcException rpcEx) when (rpcEx.StatusCode == StatusCode.Cancelled)
@@ -214,7 +208,7 @@ public class AgentGrpcServiceImpl : AgentService.AgentServiceBase
         {
             // Clean up
             if (!string.IsNullOrEmpty(agentId))
-                _connectedAgents.TryRemove(agentId, out _);
+                _agentGrpcService.UnregisterAgentConnection(agentId);
         }
     }
     
@@ -227,68 +221,14 @@ public class AgentGrpcServiceImpl : AgentService.AgentServiceBase
             _logger.LogInformation("Executing command {CommandType} for {InstanceId}",
                 request.CommandType, request.InstanceId);
             
-            // Send command to agent via stream if connected
-            if (_connectedAgents.TryGetValue(request.AgentId, out var agentStream))
+            // Send command to agent via singleton service if connected
+            var sent = await _agentGrpcService.SendCommandToAgentAsync(request.AgentId, request);
+            
+            if (sent)
             {
-                var controlMessage = new ControlPlaneMessage();
-                
-                switch (request.CommandType)
-                {
-                    case "SPAWN":
-                        var spawnParams = JsonSerializer.Deserialize<SpawnCommandParams>(
-                            request.Parameters);
-                        if (spawnParams != null)
-                        {
-                            controlMessage.Spawn = new SpawnCommand
-                            {
-                                ApplicationId = request.ApplicationId,
-                                InstanceId = request.InstanceId,
-                                ExecutablePath = spawnParams.ExecutablePath,
-                                Arguments = spawnParams.Arguments,
-                                WorkingDirectory = spawnParams.WorkingDirectory,
-                                EnvironmentVariables = { spawnParams.EnvironmentVariables },
-                                Ports = { spawnParams.Ports.Select(p => new PortMapping
-                                {
-                                    Name = p.Name,
-                                    InternalPort = p.InternalPort,
-                                    ExternalPort = p.ExternalPort,
-                                    Protocol = p.Protocol
-                                })},
-                                HealthCheckUrl = spawnParams.HealthCheckUrl,
-                                HealthCheckInterval = spawnParams.HealthCheckInterval
-                            };
-                        }
-                        break;
-                        
-                    case "KILL":
-                        var killParams = JsonSerializer.Deserialize<KillCommandParams>(
-                            request.Parameters);
-                        if (killParams != null)
-                        {
-                            controlMessage.Kill = new KillCommand
-                            {
-                                InstanceId = request.InstanceId,
-                                Force = killParams.Force,
-                                TimeoutSeconds = killParams.TimeoutSeconds
-                            };
-                        }
-                        break;
-                        
-                    case "RESTART":
-                        var restartParams = JsonSerializer.Deserialize<RestartCommandParams>(
-                            request.Parameters);
-                        if (restartParams != null)
-                        {
-                            controlMessage.Restart = new RestartCommand
-                            {
-                                InstanceId = request.InstanceId,
-                                TimeoutSeconds = restartParams.TimeoutSeconds
-                            };
-                        }
-                        break;
-                }
-                
-                await agentStream.Stream.WriteAsync(controlMessage);
+                // We don't mark as sent here because AgentGrpcService doesn't do it.
+                // Actually CommandService.QueueSpawnCommand calls TrySendCommandImmediately which marks as sent.
+                // But this is ExecuteCommand (likely from REST API).
                 
                 return new CommandResponse
                 {
@@ -335,20 +275,7 @@ public class AgentGrpcServiceImpl : AgentService.AgentServiceBase
         }
     }
     
-    public async Task SendCommandToAgentAsync(string agentId, ControlPlaneMessage message)
-    {
-        if (_connectedAgents.TryGetValue(agentId, out var agentStream))
-        {
-            try
-            {
-                await agentStream.Stream.WriteAsync(message);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to send command to agent {AgentId}", agentId);
-            }
-        }
-    }
+    // This is now handled by AgentGrpcService
     
     private async Task ProcessAgentMessageAsync(string agentId, AgentMessage message)
     {
@@ -553,6 +480,6 @@ public class CommandQueueItem
     public string Status { get; set; } = "Pending"; // Pending, Sent, Executed, Failed
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? SentAt { get; set; }
-    public DateTime? ExecutedAt { get; set; }
+    public DateTime? CompletedAt { get; set; }
     public string? ErrorMessage { get; set; }
 }

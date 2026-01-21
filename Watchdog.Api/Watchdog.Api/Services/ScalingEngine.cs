@@ -29,11 +29,14 @@ public class ScalingEngine : IScalingEngine
     
     public async Task CheckAndScaleApplications()
     {
-        var applications = await _applicationRepository.GetAllAsync();
+        var applications = await _applicationRepository.GetAll();
         
         foreach (var application in applications)
         {
-            await CheckApplicationScaling(application);
+            if (IsValidForScaling(application))
+            {
+                await CheckApplicationScaling(application);
+            }
         }
     }
     
@@ -55,7 +58,7 @@ public class ScalingEngine : IScalingEngine
         });
         
         // Get current running instances
-        var instances = await _applicationRepository.GetApplicationInstancesAsync(applicationId);
+        var instances = await _applicationRepository.GetApplicationInstances(applicationId);
         var runningInstances = instances.Count(i => i.Status == "Running");
         
         if (runningInstances < desiredInstances)
@@ -72,24 +75,20 @@ public class ScalingEngine : IScalingEngine
     
     public async Task ScaleUpApplication(string applicationId, int instancesToAdd)
     {
-        var application = await _applicationRepository.GetByIdAsync(applicationId);
+        var application = await _applicationRepository.GetById(applicationId);
         if (application == null)
             return;
         
         _logger.LogInformation("Scaling up application {ApplicationId} by {InstancesToAdd} instances",
             applicationId, instancesToAdd);
         
-        // Get online agents
-        var agents = await _agentManager.GetOnlineAgents();
-        if (!agents.Any())
+        var agent = await GetAgentForScaling(applicationId);
+        if (agent == null)
         {
             _logger.LogWarning("No online agents available for scaling up application {ApplicationId}", 
                 applicationId);
             return;
         }
-        
-        // Find agent with most available capacity
-        var agent = agents.OrderByDescending(a => a.AvailableMemoryMB).First();
         
         for (int i = 0; i < instancesToAdd; i++)
         {
@@ -109,7 +108,7 @@ public class ScalingEngine : IScalingEngine
             applicationId, instancesToRemove);
         
         // Get running instances
-        var instances = await _applicationRepository.GetApplicationInstancesAsync(applicationId);
+        var instances = await _applicationRepository.GetApplicationInstances(applicationId);
         var runningInstances = instances
             .Where(i => i.Status == "Running")
             .OrderBy(i => i.StartedAt) // Remove oldest first
@@ -127,7 +126,7 @@ public class ScalingEngine : IScalingEngine
     private async Task CheckApplicationScaling(Application application)
     {
         // Get current instances
-        var instances = await _applicationRepository.GetApplicationInstancesAsync(application.Id);
+        var instances = await _applicationRepository.GetApplicationInstances(application.Id);
         var runningInstances = instances.Count(i => i.Status == "Running");
         
         // Check min instances
@@ -159,5 +158,63 @@ public class ScalingEngine : IScalingEngine
             
             await ScaleApplication(application.Id, application.DesiredInstances);
         }
+    }
+
+    private async Task<Agent?> GetAgentForScaling(string applicationId)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        
+        const string assignedSql = @"
+            SELECT 
+                a.Id, a.Name, a.IpAddress, a.Status,
+                a.TotalMemoryMB, a.AvailableMemoryMB, a.CpuCores,
+                a.AvailablePorts, a.LastHeartbeat, a.RegisteredAt
+            FROM AgentApplications aa
+            INNER JOIN Agents a ON aa.AgentId = a.Id
+            WHERE aa.ApplicationId = @ApplicationId
+            AND a.Status = 'Online'
+            AND a.LastHeartbeat > DATEADD(MINUTE, -5, GETUTCDATE())
+            ORDER BY a.AvailableMemoryMB DESC";
+        
+        var assignedAgents = await connection.QueryAsync<Agent>(assignedSql, new { ApplicationId = applicationId });
+        var assignedList = assignedAgents.ToList();
+        // if (assignedList.Any())
+        // {
+        //     return assignedList.First();
+        // }
+        //
+        // var agents = await _agentManager.GetOnlineAgents();
+        // var agentsList = agents.ToList();
+        if (!assignedList.Any())
+        {
+            return null;
+        }
+        
+        var agent = assignedList.OrderByDescending(a => a.AvailableMemoryMB).First();
+        
+        await _agentManager.AssignApplicationToAgent(agent.Id, applicationId);
+        
+        return agent;
+    }
+
+    private bool IsValidForScaling(Application application)
+    {
+        if (string.IsNullOrWhiteSpace(application.ExecutablePath) || 
+            application.ExecutablePath.Trim().Equals("string", StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogWarning("Skipping scaling for application {ApplicationId} because it has an invalid ExecutablePath: '{Path}'", 
+                application.Id, application.ExecutablePath);
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(application.Name) || 
+            application.Name.Trim().Equals("string", StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogWarning("Skipping scaling for application {ApplicationId} because it has an invalid Name: '{Name}'", 
+                application.Id, application.Name);
+            return false;
+        }
+
+        return true;
     }
 }

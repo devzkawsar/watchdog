@@ -13,4 +13,5 @@ public interface IProcessManager
     Task<List<ProcessInfo>> GetAllProcesses();
     Task<bool> IsProcessRunning(string instanceId);
     Task<ProcessMetrics?> GetProcessMetrics(string instanceId);
+    Task ReattachProcesses();
 }

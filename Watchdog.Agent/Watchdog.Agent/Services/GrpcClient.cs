@@ -10,6 +10,7 @@ using Watchdog.Agent.Configuration;
 using Watchdog.Agent.Interface;
 using Watchdog.Agent.Models;
 using Watchdog.Agent.Protos;
+using ApplicationStatus = Watchdog.Agent.Enums.ApplicationStatus;
 
 namespace Watchdog.Agent.Services;
 
@@ -541,7 +542,7 @@ public class GrpcClient : IGrpcClientInternal
             // Update instance status
             await _applicationManager.UpdateInstanceStatus(
                 command.InstanceId,
-                Watchdog.Agent.Models.ApplicationStatus.Running,
+                Enums.ApplicationStatus.Running,
                 result.ProcessId,
                 result.Ports);
             
@@ -564,7 +565,7 @@ public class GrpcClient : IGrpcClientInternal
             // Update instance status
             await _applicationManager.UpdateInstanceStatus(
                 command.InstanceId,
-                Watchdog.Agent.Models.ApplicationStatus.Error);
+                ApplicationStatus.Error);
             
             // Report error to control plane
             await SendError(new ErrorReport

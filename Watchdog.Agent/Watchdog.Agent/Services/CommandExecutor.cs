@@ -6,6 +6,7 @@ using Watchdog.Agent.Configuration;
 using Watchdog.Agent.Interface;
 using Watchdog.Agent.Models;
 using Watchdog.Agent.Protos;
+using ApplicationStatus = Watchdog.Agent.Enums.ApplicationStatus;
 
 namespace Watchdog.Agent.Services;
 
@@ -94,6 +95,22 @@ public class CommandExecutor : ICommandExecutorInternal
             throw new InvalidOperationException("Invalid SPAWN parameters");
         }
 
+        // Idempotency: if this instance already exists and is running, skip spawning a duplicate
+        var existingInstance = await _applicationManager.GetApplicationInstance(command.InstanceId);
+        if (existingInstance != null &&
+            existingInstance.Status == ApplicationStatus.Running &&
+            existingInstance.ProcessId.HasValue)
+        {
+            var isRunning = await _processManager.IsProcessRunning(command.InstanceId);
+            if (isRunning)
+            {
+                _logger.LogInformation(
+                    "SPAWN command for already running instance {InstanceId}; skipping duplicate spawn",
+                    command.InstanceId);
+                return;
+            }
+        }
+
         var spawnCommand = new SpawnCommand
         {
             ApplicationId = command.ApplicationId,
@@ -137,7 +154,7 @@ public class CommandExecutor : ICommandExecutorInternal
         var result = await _processManager.SpawnProcess(spawnCommand, ports);
         if (!result.Success)
         {
-            await _applicationManager.UpdateInstanceStatus(command.InstanceId, Watchdog.Agent.Models.ApplicationStatus.Error);
+            await _applicationManager.UpdateInstanceStatus(command.InstanceId, ApplicationStatus.Error);
 
             await _grpcClient.SendError(new ErrorReport
             {
@@ -152,7 +169,7 @@ public class CommandExecutor : ICommandExecutorInternal
 
         await _applicationManager.UpdateInstanceStatus(
             command.InstanceId,
-            Watchdog.Agent.Models.ApplicationStatus.Running,
+            ApplicationStatus.Running,
             result.ProcessId,
             result.Ports);
 
@@ -188,7 +205,7 @@ public class CommandExecutor : ICommandExecutorInternal
             return;
         }
 
-        await _applicationManager.UpdateInstanceStatus(command.InstanceId, Models.ApplicationStatus.Stopped);
+        await _applicationManager.UpdateInstanceStatus(command.InstanceId, ApplicationStatus.Stopped);
 
         await _grpcClient.SendApplicationStopped(new ApplicationStopped
         {

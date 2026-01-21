@@ -23,4 +23,8 @@
     <ItemGroup>
       <Protobuf Include="Protos\monitoring.proto" GrpcServices="Client" />
     </ItemGroup>
+
+    <ItemGroup>
+      <Folder Include="data\storage\" />
+    </ItemGroup>
 </Project>

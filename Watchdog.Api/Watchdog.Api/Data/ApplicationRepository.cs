@@ -1,20 +1,8 @@
 ﻿using Dapper;
-using System.Data;
 using System.Text.Json;
+using Watchdog.Api.Interface;
 
 namespace Watchdog.Api.Data;
-
-public interface IApplicationRepository
-{
-    Task<IEnumerable<Application>> GetAllAsync();
-    Task<Application?> GetByIdAsync(string id);
-    Task<int> CreateAsync(Application application);
-    Task<int> UpdateAsync(Application application);
-    Task<int> DeleteAsync(string id);
-    Task<IEnumerable<ApplicationInstance>> GetApplicationInstancesAsync(string applicationId);
-    Task<int> UpdateInstanceStatusAsync(string instanceId, string status, 
-        double? cpuPercent = null, double? memoryMB = null);
-}
 
 public class ApplicationRepository : IApplicationRepository
 {
@@ -25,7 +13,7 @@ public class ApplicationRepository : IApplicationRepository
         _connectionFactory = connectionFactory;
     }
     
-    public async Task<IEnumerable<Application>> GetAllAsync()
+    public async Task<IEnumerable<Application>> GetAll()
     {
         using var connection = _connectionFactory.CreateConnection();
         
@@ -60,7 +48,7 @@ public class ApplicationRepository : IApplicationRepository
         return applications;
     }
     
-    public async Task<Application?> GetByIdAsync(string id)
+    public async Task<Application?> GetById(string id)
     {
         using var connection = _connectionFactory.CreateConnection();
         
@@ -94,7 +82,7 @@ public class ApplicationRepository : IApplicationRepository
         return app;
     }
     
-    public async Task<int> CreateAsync(Application application)
+    public async Task<int> Create(Application application)
     {
         using var connection = _connectionFactory.CreateConnection();
         
@@ -117,7 +105,7 @@ public class ApplicationRepository : IApplicationRepository
         return await connection.ExecuteAsync(sql, application);
     }
     
-    public async Task<int> UpdateAsync(Application application)
+    public async Task<int> Update(Application application)
     {
         using var connection = _connectionFactory.CreateConnection();
         
@@ -147,7 +135,7 @@ public class ApplicationRepository : IApplicationRepository
         return await connection.ExecuteAsync(sql, application);
     }
     
-    public async Task<int> DeleteAsync(string id)
+    public async Task<int> Delete(string id)
     {
         using var connection = _connectionFactory.CreateConnection();
         
@@ -155,7 +143,7 @@ public class ApplicationRepository : IApplicationRepository
         return await connection.ExecuteAsync(sql, new { Id = id });
     }
     
-    public async Task<IEnumerable<ApplicationInstance>> GetApplicationInstancesAsync(string applicationId)
+    public async Task<IEnumerable<ApplicationInstance>> GetApplicationInstances(string applicationId)
     {
         using var connection = _connectionFactory.CreateConnection();
         
@@ -171,7 +159,7 @@ public class ApplicationRepository : IApplicationRepository
         return await connection.QueryAsync<ApplicationInstance>(sql, new { ApplicationId = applicationId });
     }
     
-    public async Task<int> UpdateInstanceStatusAsync(string instanceId, string status, 
+    public async Task<int> UpdateInstanceStatus(string instanceId, string status, 
         double? cpuPercent = null, double? memoryMB = null)
     {
         using var connection = _connectionFactory.CreateConnection();

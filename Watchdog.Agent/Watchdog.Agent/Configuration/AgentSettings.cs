@@ -9,9 +9,17 @@ public class AgentSettings
     public int RegistrationRetryInterval { get; set; } = 30;
     public int MaxRegistrationAttempts { get; set; } = 10;
     public string WorkingDirectory { get; set; } = 
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "Watchdog", "Applications");
+        OperatingSystem.IsWindows() 
+            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "Watchdog", "Applications")
+            : Path.Combine(AppContext.BaseDirectory, "data", "applications");
+            
     public string LogDirectory { get; set; } = 
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "Watchdog", "Logs");
+        OperatingSystem.IsWindows()
+            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "Watchdog", "Logs")
+            : Path.Combine(AppContext.BaseDirectory, "data", "logs");
+            
     public string DataDirectory { get; set; } = 
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "Watchdog", "Data");
+        OperatingSystem.IsWindows()
+            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "Watchdog", "Data")
+            : Path.Combine(AppContext.BaseDirectory, "data", "storage");
 }

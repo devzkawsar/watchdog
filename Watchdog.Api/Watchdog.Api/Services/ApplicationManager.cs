@@ -27,12 +27,12 @@ public class ApplicationManager : IApplicationManager
     
     public async Task<IEnumerable<Application>> GetApplications()
     {
-        return await _applicationRepository.GetAllAsync();
+        return await _applicationRepository.GetAll();
     }
     
     public async Task<Application?> GetApplication(string id)
     {
-        return await _applicationRepository.GetByIdAsync(id);
+        return await _applicationRepository.GetById(id);
     }
     
     public async Task<Application> CreateApplication(CreateApplicationRequest request)
@@ -56,7 +56,9 @@ public class ApplicationManager : IApplicationManager
             AutoStart = request.AutoStart
         };
         
-        await _applicationRepository.CreateAsync(application);
+        ValidateApplication(application);
+        
+        await _applicationRepository.Create(application);
         
         _logger.LogInformation("Created application {ApplicationId} ({Name})", 
             application.Id, application.Name);
@@ -72,7 +74,7 @@ public class ApplicationManager : IApplicationManager
     
     public async Task<bool> UpdateApplication(string id, UpdateApplicationRequest request)
     {
-        var existing = await _applicationRepository.GetByIdAsync(id);
+        var existing = await _applicationRepository.GetById(id);
         if (existing == null)
             return false;
         
@@ -91,7 +93,9 @@ public class ApplicationManager : IApplicationManager
         existing.EnvironmentVariables = request.EnvironmentVariables ?? existing.EnvironmentVariables;
         existing.AutoStart = request.AutoStart;
         
-        await _applicationRepository.UpdateAsync(existing);
+        ValidateApplication(existing);
+        
+        await _applicationRepository.Update(existing);
         
         _logger.LogInformation("Updated application {ApplicationId}", id);
         
@@ -110,7 +114,7 @@ public class ApplicationManager : IApplicationManager
         await StopApplication(id);
         
         // Then delete from database
-        var result = await _applicationRepository.DeleteAsync(id);
+        var result = await _applicationRepository.Delete(id);
         
         if (result > 0)
         {
@@ -123,18 +127,18 @@ public class ApplicationManager : IApplicationManager
     
     public async Task<IEnumerable<ApplicationInstance>> GetApplicationInstances(string applicationId)
     {
-        return await _applicationRepository.GetApplicationInstancesAsync(applicationId);
+        return await _applicationRepository.GetApplicationInstances(applicationId);
     }
     
     public async Task<bool> UpdateInstanceStatus(string instanceId, string status, double? cpuPercent = null, double? memoryMB = null)
     {
-        var updated = await _applicationRepository.UpdateInstanceStatusAsync(instanceId, status, cpuPercent, memoryMB);
+        var updated = await _applicationRepository.UpdateInstanceStatus(instanceId, status, cpuPercent, memoryMB);
         return updated > 0;
     }
     
     public async Task<bool> StartApplication(string applicationId)
     {
-        var application = await _applicationRepository.GetByIdAsync(applicationId);
+        var application = await _applicationRepository.GetById(applicationId);
         if (application == null)
             return false;
         
@@ -174,7 +178,7 @@ public class ApplicationManager : IApplicationManager
     
     public async Task<bool> StopApplication(string applicationId)
     {
-        var instances = await _applicationRepository.GetApplicationInstancesAsync(applicationId);
+        var instances = await _applicationRepository.GetApplicationInstances(applicationId);
         var runningInstances = instances.Where(i => i.Status == "Running");
         
         _logger.LogInformation("Stopping {Count} instances of application {ApplicationId}",
@@ -220,7 +224,7 @@ public class ApplicationManager : IApplicationManager
     
     private async Task TriggerScaling(Application application)
     {
-        var currentInstances = await _applicationRepository.GetApplicationInstancesAsync(application.Id);
+        var currentInstances = await _applicationRepository.GetApplicationInstances(application.Id);
         var runningInstances = currentInstances.Count(i => i.Status == "Running");
         
         if (runningInstances < application.DesiredInstances)
@@ -254,6 +258,21 @@ public class ApplicationManager : IApplicationManager
                     instance.ApplicationId,
                     instance.InstanceId);
             }
+        }
+    }
+
+    private void ValidateApplication(Application application)
+    {
+        if (string.IsNullOrWhiteSpace(application.ExecutablePath) || 
+            application.ExecutablePath.Trim().Equals("string", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ValidationException("ExecutablePath cannot be empty or a placeholder value like 'string'.");
+        }
+
+        if (string.IsNullOrWhiteSpace(application.Name) || 
+            application.Name.Trim().Equals("string", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ValidationException("Application Name cannot be empty or a placeholder value like 'string'.");
         }
     }
 }

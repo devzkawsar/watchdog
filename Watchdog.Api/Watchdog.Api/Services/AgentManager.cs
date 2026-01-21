@@ -141,33 +141,48 @@ public class AgentManager : IAgentManager
     /// </summary>
     /// <param name="agentId">The ID of the agent.</param>
     /// <param name="applicationId">The ID of the application.</param>
-    /// <returns>True if the application was assigned, false otherwise.</returns>
+    /// <returns>True if the application was assigned (or already assigned), false if agent or application not found.</returns>
     public async Task<bool> AssignApplicationToAgent(string agentId, string applicationId)
     {
         using var connection = _connectionFactory.CreateConnection();
         
-        const string sql = @"
-            MERGE AgentApplications AS target
-            USING (SELECT @AgentId AS AgentId, @ApplicationId AS ApplicationId) AS source
-            ON target.AgentId = source.AgentId AND target.ApplicationId = source.ApplicationId
-            WHEN NOT MATCHED THEN
-                INSERT (AgentId, ApplicationId, AssignedInstances)
-                VALUES (@AgentId, @ApplicationId, 0);";
+        // Check if agent exists
+        var agentExists = await connection.ExecuteScalarAsync<int>(
+            "SELECT COUNT(1) FROM Agents WHERE Id = @Id", new { Id = agentId }) > 0;
         
-        var result = await connection.ExecuteAsync(sql, new
+        if (!agentExists)
+        {
+            _logger.LogWarning("Failed to assign application: Agent {AgentId} not found", agentId);
+            return false;
+        }
+
+        // Check if application exists
+        var applicationExists = await connection.ExecuteScalarAsync<int>(
+            "SELECT COUNT(1) FROM Applications WHERE Id = @Id", new { Id = applicationId }) > 0;
+        
+        if (!applicationExists)
+        {
+            _logger.LogWarning("Failed to assign application: Application {ApplicationId} not found", applicationId);
+            return false;
+        }
+
+        const string sql = @"
+            IF NOT EXISTS (SELECT 1 FROM AgentApplications WHERE AgentId = @AgentId AND ApplicationId = @ApplicationId)
+            BEGIN
+                INSERT INTO AgentApplications (AgentId, ApplicationId, CurrentInstancesOnAgent)
+                VALUES (@AgentId, @ApplicationId, 0);
+            END";
+        
+        await connection.ExecuteAsync(sql, new
         {
             AgentId = agentId,
             ApplicationId = applicationId
         });
         
-        if (result > 0)
-        {
-            _logger.LogInformation("Assigned application {ApplicationId} to agent {AgentId}",
-                applicationId, agentId);
-            return true;
-        }
+        _logger.LogInformation("Assigned application {ApplicationId} to agent {AgentId}",
+            applicationId, agentId);
         
-        return false;
+        return true;
     }
     
     /// <summary>

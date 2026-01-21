@@ -163,7 +163,7 @@ public class CommandService : ICommandService
             SELECT 
                 CommandId, CommandType, AgentId, ApplicationId, 
                 InstanceId, Parameters, Status, CreatedAt, 
-                SentAt, ExecutedAt, ErrorMessage
+                SentAt, CompletedAt, ErrorMessage
             FROM CommandQueue
             WHERE AgentId = @AgentId 
             AND Status = 'Pending'
@@ -197,7 +197,7 @@ public class CommandService : ICommandService
         const string sql = @"
             UPDATE CommandQueue 
             SET Status = @Status,
-                ExecutedAt = GETUTCDATE(),
+                CompletedAt = GETUTCDATE(),
                 ErrorMessage = @ErrorMessage
             WHERE CommandId = @CommandId";
         

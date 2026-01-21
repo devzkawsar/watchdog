@@ -4,7 +4,9 @@ using System.Text.Json;
 using Microsoft.Extensions.Options;
 using Watchdog.Agent.Configuration;
 using Watchdog.Agent.Interface;
+using Watchdog.Agent.Models;
 using Watchdog.Agent.Protos;
+using ApplicationStatus = Watchdog.Agent.Enums.ApplicationStatus;
 
 namespace Watchdog.Agent.Services
 {
@@ -19,8 +21,8 @@ namespace Watchdog.Agent.Services
         private readonly IOptions<AgentSettings> _agentSettings;
         private readonly IOptions<MonitoringSettings> _monitoringSettings;
         
-        private readonly ConcurrentDictionary<string, Watchdog.Agent.Models.ApplicationConfig> _applications = new();
-        private readonly ConcurrentDictionary<string, Watchdog.Agent.Models.ManagedApplication> _instances = new();
+        private readonly ConcurrentDictionary<string, ApplicationConfig> _applications = new();
+        private readonly ConcurrentDictionary<string, ManagedApplication> _instances = new();
         private readonly object _syncLock = new();
         
         public ApplicationManager(
@@ -58,18 +60,18 @@ namespace Watchdog.Agent.Services
             }
         }
         
-        public Task<List<Watchdog.Agent.Models.ApplicationConfig>> GetAssignedApplications()
+        public Task<List<ApplicationConfig>> GetAssignedApplications()
         {
             return Task.FromResult(_applications.Values.ToList());
         }
         
-        public Task<Watchdog.Agent.Models.ApplicationConfig?> GetApplicationConfig(string applicationId)
+        public Task<ApplicationConfig?> GetApplicationConfig(string applicationId)
         {
             _applications.TryGetValue(applicationId, out var config);
             return Task.FromResult(config);
         }
         
-        public Task<bool> ValidateApplicationConfig(Watchdog.Agent.Models.ApplicationConfig config)
+        public Task<bool> ValidateApplicationConfig(ApplicationConfig config)
         {
             try
             {
@@ -148,14 +150,14 @@ namespace Watchdog.Agent.Services
             }
         }
         
-        public async Task<Watchdog.Agent.Models.ManagedApplication> CreateApplicationInstance(SpawnCommand command)
+        public async Task<ManagedApplication> CreateApplicationInstance(SpawnCommand command)
         {
-            var instance = new Watchdog.Agent.Models.ManagedApplication
+            var instance = new ManagedApplication()
             {
                 InstanceId = command.InstanceId,
                 ApplicationId = command.ApplicationId,
                 Command = command,
-                Status = Watchdog.Agent.Models.ApplicationStatus.Starting,
+                Status = ApplicationStatus.Starting,
                 CreatedAt = DateTime.UtcNow,
                 RestartCount = 0
             };
@@ -172,20 +174,20 @@ namespace Watchdog.Agent.Services
             return instance;
         }
         
-        public Task<Watchdog.Agent.Models.ManagedApplication?> GetApplicationInstance(string instanceId)
+        public Task<ManagedApplication?> GetApplicationInstance(string instanceId)
         {
             _instances.TryGetValue(instanceId, out var instance);
             return Task.FromResult(instance);
         }
         
-        public Task<List<Watchdog.Agent.Models.ManagedApplication>> GetAllInstances()
+        public Task<List<ManagedApplication>> GetAllInstances()
         {
             return Task.FromResult(_instances.Values.ToList());
         }
         
         public async Task UpdateInstanceStatus(
             string instanceId, 
-            Watchdog.Agent.Models.ApplicationStatus status,
+            ApplicationStatus status,
             int? processId = null,
             List<PortMapping>? ports = null)
         {
@@ -201,14 +203,15 @@ namespace Watchdog.Agent.Services
                     if (ports != null)
                         instance.Ports = ports;
                     
-                    if (status == Watchdog.Agent.Models.ApplicationStatus.Running)
+                    if (status == ApplicationStatus.Running)
                     {
                         instance.StartedAt = DateTime.UtcNow;
                         instance.LastHealthCheck = DateTime.UtcNow;
                         instance.RestartCount = 0;
                         instance.LastRestartAttempt = null;
+                        instance.StopReported = false;
                     }
-                    else if (status == Watchdog.Agent.Models.ApplicationStatus.Stopped || status == Watchdog.Agent.Models.ApplicationStatus.Error)
+                    else if (status == ApplicationStatus.Stopped || status == ApplicationStatus.Error)
                     {
                         instance.StoppedAt = DateTime.UtcNow;
                     }
@@ -329,11 +332,11 @@ namespace Watchdog.Agent.Services
             await SaveState();
         }
         
-        public Task<bool> ShouldRestartInstance(Watchdog.Agent.Models.ManagedApplication instance)
+        public Task<bool> ShouldRestartInstance(ManagedApplication instance)
         {
-            if (instance.Status != Watchdog.Agent.Models.ApplicationStatus.Error && 
-                instance.Status != Watchdog.Agent.Models.ApplicationStatus.Stopped &&
-                instance.Status != Watchdog.Agent.Models.ApplicationStatus.Unhealthy)
+            if (instance.Status != ApplicationStatus.Error && 
+                instance.Status != ApplicationStatus.Stopped &&
+                instance.Status != ApplicationStatus.Unhealthy)
                 return Task.FromResult(false);
 
             _applications.TryGetValue(instance.ApplicationId, out var appConfig);
@@ -364,6 +367,51 @@ namespace Watchdog.Agent.Services
             return Task.FromResult(true);
         }
         
+        public async Task NotifyInstanceStopped(string instanceId, int exitCode, string reason)
+        {
+            if (!_instances.TryGetValue(instanceId, out var instance))
+            {
+                _logger.LogWarning("NotifyInstanceStopped called for unknown instance {InstanceId}", instanceId);
+                return;
+            }
+
+            bool shouldSend;
+            lock (_syncLock)
+            {
+                if (instance.StopReported)
+                {
+                    shouldSend = false;
+                }
+                else
+                {
+                    instance.StopReported = true;
+                    shouldSend = true;
+                }
+            }
+
+            if (!shouldSend)
+                return;
+
+            await SaveState();
+
+            try
+            {
+                var grpcClient = _serviceProvider.GetRequiredService<IGrpcClient>();
+                await grpcClient.SendApplicationStopped(new ApplicationStopped
+                {
+                    InstanceId = instance.InstanceId,
+                    ApplicationId = instance.ApplicationId,
+                    ExitCode = exitCode,
+                    Reason = reason,
+                    StopTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to notify control plane about stopped instance {InstanceId}", instanceId);
+            }
+        }
+        
         public async Task IncrementRestartCount(string instanceId)
         {
             if (_instances.TryGetValue(instanceId, out var instance))
@@ -379,9 +427,9 @@ namespace Watchdog.Agent.Services
             }
         }
         
-        private Task<string> GetInstanceHealthStatus(Watchdog.Agent.Models.ManagedApplication instance)
+        private Task<string> GetInstanceHealthStatus(ManagedApplication instance)
         {
-            if (instance.Status != Watchdog.Agent.Models.ApplicationStatus.Running)
+            if (instance.Status != ApplicationStatus.Running)
                 return Task.FromResult("Stopped");
             
             // Check if process is still running
@@ -465,7 +513,7 @@ namespace Watchdog.Agent.Services
         {
             try
             {
-                var state = new Watchdog.Agent.Models.AgentState
+                var state = new AgentState
                 {
                     Applications = _applications.Values.ToList(),
                     Instances = _instances.Values.ToList(),
@@ -485,71 +533,5 @@ namespace Watchdog.Agent.Services
                 _logger.LogError(ex, "Failed to save state");
             }
         }
-    }
-}
-
-namespace Watchdog.Agent.Models
-{
-    public class ApplicationConfig
-    {
-        public string Id { get; set; } = string.Empty;
-        public string Name { get; set; } = string.Empty;
-        public string ExecutablePath { get; set; } = string.Empty;
-        public string Arguments { get; set; } = string.Empty;
-        public string WorkingDirectory { get; set; } = string.Empty;
-        public int DesiredInstances { get; set; } = 1;
-        public List<PortRequirement> PortRequirements { get; set; } = new();
-        public Dictionary<string, string> EnvironmentVariables { get; set; } = new();
-        public string HealthCheckUrl { get; set; } = string.Empty;
-        public int HealthCheckInterval { get; set; } = 30;
-        public int MaxRestartAttempts { get; set; } = 3;
-        public int RestartDelaySeconds { get; set; } = 10;
-    }
-
-    public class ManagedApplication
-    {
-        public string InstanceId { get; set; } = string.Empty;
-        public string ApplicationId { get; set; } = string.Empty;
-        public SpawnCommand? Command { get; set; }
-        public ApplicationStatus Status { get; set; } = ApplicationStatus.Pending;
-        public int? ProcessId { get; set; }
-        public List<PortMapping> Ports { get; set; } = new();
-        public ProcessMetrics? Metrics { get; set; }
-        public DateTime CreatedAt { get; set; }
-        public DateTime? StartedAt { get; set; }
-        public DateTime? StoppedAt { get; set; }
-        public DateTime? LastHealthCheck { get; set; }
-        public int RestartCount { get; set; }
-        public DateTime? LastRestartAttempt { get; set; }
-        public string? LastError { get; set; }
-    }
-
-    public enum ApplicationStatus
-    {
-        Pending,
-        Starting,
-        Running,
-        Unhealthy,
-        Stopping,
-        Stopped,
-        Error
-    }
-
-    public class AgentState
-    {
-        public List<ApplicationConfig> Applications { get; set; } = new();
-        public List<ManagedApplication> Instances { get; set; } = new();
-        public DateTime SavedAt { get; set; }
-    }
-
-    public class ProcessMetrics
-    {
-        public double CpuPercent { get; set; }
-        public double MemoryMB { get; set; }
-        public int ThreadCount { get; set; }
-        public long HandleCount { get; set; }
-        public long IoReadBytes { get; set; }
-        public long IoWriteBytes { get; set; }
-        public DateTime CollectedAt { get; set; }
     }
 }

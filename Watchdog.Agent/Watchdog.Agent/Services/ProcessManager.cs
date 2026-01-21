@@ -235,8 +235,9 @@ public class ProcessManager : IProcessManagerInternal
         {
             if (!_managedProcesses.TryGetValue(instanceId, out var managedProcess))
             {
-                _logger.LogWarning("Process not found for instance {InstanceId}", instanceId);
-                return false;
+                _logger.LogWarning("Process not found for instance {InstanceId}, treating as already stopped", instanceId);
+                await _applicationManager.UpdateInstanceStatus(instanceId, Enums.ApplicationStatus.Stopped);
+                return true;
             }
             
             _logger.LogInformation(
@@ -244,7 +245,7 @@ public class ProcessManager : IProcessManagerInternal
                 managedProcess.Process.Id, instanceId, force);
             
             // Update application manager
-            await _applicationManager.UpdateInstanceStatus(instanceId, Watchdog.Agent.Models.ApplicationStatus.Stopping);
+            await _applicationManager.UpdateInstanceStatus(instanceId, Enums.ApplicationStatus.Stopping);
             
             var process = managedProcess.Process;
             
@@ -428,6 +429,66 @@ public class ProcessManager : IProcessManagerInternal
         }
     }
     
+    public async Task ReattachProcesses()
+    {
+        try
+        {
+            var instances = await _applicationManager.GetAllInstances();
+            foreach (var instance in instances)
+            {
+                if (instance.Status != Enums.ApplicationStatus.Running ||
+                    !instance.ProcessId.HasValue)
+                {
+                    continue;
+                }
+                
+                if (_managedProcesses.ContainsKey(instance.InstanceId))
+                {
+                    continue;
+                }
+                
+                Process process;
+                try
+                {
+                    process = Process.GetProcessById(instance.ProcessId.Value);
+                    if (process.HasExited)
+                    {
+                        continue;
+                    }
+                }
+                catch
+                {
+                    continue;
+                }
+                
+                var managedProcess = new ManagedProcess
+                {
+                    Process = process,
+                    InstanceId = instance.InstanceId,
+                    ApplicationId = instance.ApplicationId,
+                    Command = instance.Command,
+                    Ports = instance.Ports ?? new List<PortMapping>(),
+                    StartTime = instance.StartedAt ?? DateTime.UtcNow,
+                    StdOutPath = string.Empty,
+                    StdErrPath = string.Empty
+                };
+                
+                _managedProcesses[instance.InstanceId] = managedProcess;
+                _processIdToInstanceId[process.Id] = instance.InstanceId;
+                
+                _logger.LogInformation(
+                    "Reattached to existing process {ProcessId} for instance {InstanceId}",
+                    process.Id, instance.InstanceId);
+                
+                _ = Task.Run(() => MonitorProcess(managedProcess));
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error reattaching to existing processes");
+        }
+    }
+    
     private Dictionary<string, string> BuildEnvironmentVariables(
         SpawnCommand command, 
         List<PortMapping> ports, 
@@ -535,17 +596,25 @@ public class ProcessManager : IProcessManagerInternal
             
             // Update application manager
             var status = exitCode == 0 
-                ? Watchdog.Agent.Models.ApplicationStatus.Stopped 
-                : Watchdog.Agent.Models.ApplicationStatus.Error;
+                ? Enums.ApplicationStatus.Stopped 
+                : Enums.ApplicationStatus.Error;
             await _applicationManager.UpdateInstanceStatus(
                 managedProcess.InstanceId,
                 status);
+
+            if (status == Enums.ApplicationStatus.Stopped)
+            {
+                await _applicationManager.NotifyInstanceStopped(
+                    managedProcess.InstanceId,
+                    exitCode,
+                    "Process exited normally");
+            }
+
+            // Log exit
+            await LogProcessExit(managedProcess, exitCode);
             
             // Clean up resources
             await CleanupProcessResources(managedProcess);
-            
-            // Log exit
-            await LogProcessExit(managedProcess, exitCode);
             
         }
         catch (Exception ex)
