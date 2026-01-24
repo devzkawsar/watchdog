@@ -11,7 +11,7 @@ public interface IApplicationManager
     Task<bool> UpdateApplication(string id, UpdateApplicationRequest request);
     Task<bool> DeleteApplication(string id);
     Task<IEnumerable<ApplicationInstance>> GetApplicationInstances(string applicationId);
-    Task<bool> UpdateInstanceStatus(string instanceId, string status, double? cpuPercent = null, double? memoryMB = null);
+    Task<bool> UpdateInstanceStatus(string instanceId, string status, double? cpuPercent = null, double? memoryMB = null, int? processId = null);
     Task<bool> StartApplication(string applicationId);
     Task<bool> StopApplication(string applicationId);
     Task<bool> RestartApplication(string applicationId);

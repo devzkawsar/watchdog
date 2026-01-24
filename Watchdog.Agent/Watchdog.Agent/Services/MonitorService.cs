@@ -348,7 +348,7 @@ public class MonitorService : IMonitorServiceInternal
                     // Treat as a normal stop reported to the control plane.
                     // Do not mark as a restartable failure here; let the control plane decide.
                     detection.IsFailure = false;
-                    detection.Reason = "Process is not running";
+                    detection.Reason = "Process not running";
                     detection.FailureType = FailureType.ProcessExited;
                     detection.ShouldRestart = false;
 
@@ -422,27 +422,19 @@ public class MonitorService : IMonitorServiceInternal
             }
             else if (instance.Status == Enums.ApplicationStatus.Error)
             {
-                var shouldRestart = await _applicationManager.ShouldRestartInstance(instance);
-                if (shouldRestart)
-                {
-                    detection.IsFailure = true;
-                    detection.Reason = "Instance stopped and requires restart";
-                    detection.FailureType = FailureType.Stopped;
-                    detection.ShouldRestart = true;
-                    return detection;
-                }
+                detection.IsFailure = true;
+                detection.Reason = "Instance is in error state";
+                detection.FailureType = FailureType.Stopped;
+                detection.ShouldRestart = true;
+                return detection;
             }
             else if (instance.Status == Enums.ApplicationStatus.Unhealthy)
             {
-                var shouldRestart = await _applicationManager.ShouldRestartInstance(instance);
-                if (shouldRestart)
-                {
-                    detection.IsFailure = true;
-                    detection.Reason = "Instance unhealthy and requires restart";
-                    detection.FailureType = FailureType.HealthCheckFailed;
-                    detection.ShouldRestart = true;
-                    return detection;
-                }
+                detection.IsFailure = true;
+                detection.Reason = "Instance is unhealthy";
+                detection.FailureType = FailureType.HealthCheckFailed;
+                detection.ShouldRestart = true;
+                return detection;
             }
         }
         catch (Exception ex)
@@ -483,7 +475,9 @@ public class MonitorService : IMonitorServiceInternal
                 ErrorType = failure.FailureType.ToString(),
                 ErrorMessage = failure.Reason ?? "Failure detected",
                 StackTrace = string.Empty,
-                Timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
+                Timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+                InstanceId = failure.InstanceId,
+                ApplicationId = failure.ApplicationId
             });
         }
         catch (Exception ex)

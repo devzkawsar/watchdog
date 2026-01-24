@@ -130,9 +130,9 @@ public class ApplicationManager : IApplicationManager
         return await _applicationRepository.GetApplicationInstances(applicationId);
     }
     
-    public async Task<bool> UpdateInstanceStatus(string instanceId, string status, double? cpuPercent = null, double? memoryMB = null)
+    public async Task<bool> UpdateInstanceStatus(string instanceId, string status, double? cpuPercent = null, double? memoryMB = null, int? processId = null)
     {
-        var updated = await _applicationRepository.UpdateInstanceStatus(instanceId, status, cpuPercent, memoryMB);
+        var updated = await _applicationRepository.UpdateInstanceStatus(instanceId, status, cpuPercent, memoryMB, processId);
         return updated > 0;
     }
     

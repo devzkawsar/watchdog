@@ -185,6 +185,7 @@ public class ProcessManager : IProcessManagerInternal
             var managedProcess = new ManagedProcess
             {
                 Process = process,
+                ProcessId = process.Id,
                 InstanceId = command.InstanceId,
                 ApplicationId = command.ApplicationId,
                 Ports = ports,
@@ -233,83 +234,96 @@ public class ProcessManager : IProcessManagerInternal
     {
         try
         {
-            if (!_managedProcesses.TryGetValue(instanceId, out var managedProcess))
+            _logger.LogInformation("Attempting to kill process for instance {InstanceId}", instanceId);
+            
+            ManagedProcess? managedProcess = null;
+            int? pidToKill = null;
+
+            if (_managedProcesses.TryGetValue(instanceId, out managedProcess))
             {
-                _logger.LogWarning("Process not found for instance {InstanceId}, treating as already stopped", instanceId);
+                pidToKill = managedProcess.ProcessId;
+                _logger.LogInformation("Instance {InstanceId} is managed. Process ID: {Pid}", instanceId, pidToKill);
+            }
+            else
+            {
+                // Fallback: try to get PID from application manager
+                var instance = await _applicationManager.GetApplicationInstance(instanceId);
+                if (instance != null && instance.ProcessId.HasValue)
+                {
+                    pidToKill = instance.ProcessId.Value;
+                    _logger.LogInformation("Instance {InstanceId} not currently managed. Attempting to kill by cached PID {Pid}", instanceId, pidToKill);
+                }
+            }
+
+            if (!pidToKill.HasValue)
+            {
+                _logger.LogWarning("No running process or cached PID found for instance {InstanceId}, treating as already stopped", instanceId);
                 await _applicationManager.UpdateInstanceStatus(instanceId, Enums.ApplicationStatus.Stopped);
                 return true;
             }
             
-            _logger.LogInformation(
-                "Killing process {ProcessId} for instance {InstanceId} (Force: {Force})",
-                managedProcess.Process.Id, instanceId, force);
-            
-            // Update application manager
+            // Update application manager to Stopping status
             await _applicationManager.UpdateInstanceStatus(instanceId, Enums.ApplicationStatus.Stopping);
             
-            var process = managedProcess.Process;
-            
-            if (!process.HasExited)
+            try
             {
-                if (!force)
+                var process = Process.GetProcessById(pidToKill.Value);
+                if (!process.HasExited)
                 {
-                    // Try graceful shutdown
-                    try
+                    if (!force)
                     {
-                        if (process.CloseMainWindow())
+                        // Try graceful shutdown
+                        try
                         {
-                            // Wait for graceful shutdown
-                            var gracefulTimeout = TimeSpan.FromSeconds(timeoutSeconds);
-                            var gracefulTask = Task.Run(() => 
-                                process.WaitForExit((int)gracefulTimeout.TotalMilliseconds));
-                            
-                            if (await gracefulTask)
+                            if (process.CloseMainWindow())
                             {
-                                _logger.LogDebug("Process {ProcessId} exited gracefully", process.Id);
+                                var gracefulTimeout = TimeSpan.FromSeconds(timeoutSeconds);
+                                if (!process.WaitForExit((int)gracefulTimeout.TotalMilliseconds))
+                                {
+                                    _logger.LogWarning("Graceful shutdown timed out for PID {Pid}, forcing kill", pidToKill.Value);
+                                    force = true;
+                                }
                             }
                             else
                             {
-                                _logger.LogWarning(
-                                    "Graceful shutdown timed out for instance {InstanceId}, forcing kill",
-                                    instanceId);
+                                _logger.LogDebug("CloseMainWindow returned false for PID {Pid}, forcing kill", pidToKill.Value);
                                 force = true;
                             }
                         }
-                        else
+                        catch (Exception ex)
                         {
-                            _logger.LogDebug("CloseMainWindow returned false, forcing kill");
+                            _logger.LogWarning(ex, "Error during graceful shutdown for PID {Pid}, forcing kill", pidToKill.Value);
                             force = true;
                         }
                     }
-                    catch (Exception ex)
+                    
+                    if (force || !process.HasExited)
                     {
-                        _logger.LogWarning(ex, "Error during graceful shutdown, forcing kill");
-                        force = true;
+                        process.Kill(entireProcessTree: true);
+                        await Task.Delay(1000); // Small delay to allow OS to clean up
                     }
                 }
                 
-                if (force || !process.HasExited)
-                {
-                    // Force kill
-                    try
-                    {
-                        process.Kill(entireProcessTree: true);
-                        await Task.WhenAny(
-                            process.WaitForExitAsync(),
-                            Task.Delay(TimeSpan.FromSeconds(5)));
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, "Error killing process {ProcessId}", process.Id);
-                    }
-                }
+                _logger.LogInformation("Successfully killed process {Pid} for instance {InstanceId}", pidToKill.Value, instanceId);
+            }
+            catch (ArgumentException)
+            {
+                _logger.LogInformation("Process {Pid} for instance {InstanceId} not found or already exited", pidToKill.Value, instanceId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error killing process {Pid} for instance {InstanceId}", pidToKill.Value, instanceId);
             }
             
-            // Clean up resources
-            await CleanupProcessResources(managedProcess);
+            // Clean up resources IF it was managed
+            if (managedProcess != null)
+            {
+                await CleanupProcessResources(managedProcess);
+                _managedProcesses.TryRemove(instanceId, out _);
+            }
             
-            _logger.LogInformation(
-                "Successfully killed process for instance {InstanceId}", instanceId);
+            // Final status update
+            await _applicationManager.UpdateInstanceStatus(instanceId, Enums.ApplicationStatus.Stopped);
             
             return true;
         }
@@ -326,22 +340,36 @@ public class ProcessManager : IProcessManagerInternal
         {
             _logger.LogInformation("Restarting process for instance {InstanceId}", instanceId);
             
+            SpawnCommand? command = null;
+            List<PortMapping> ports = new();
+            
             // Get the managed process
-            if (!_managedProcesses.TryGetValue(instanceId, out var managedProcess))
+            if (_managedProcesses.TryGetValue(instanceId, out var managedProcess))
             {
-                _logger.LogWarning("Process not found for instance {InstanceId}", instanceId);
-                return false;
+                // Kill the process if it's still running
+                await KillProcess(instanceId, false, timeoutSeconds);
+                
+                // Wait a bit
+                await Task.Delay(2000);
+                
+                command = managedProcess.Command;
+                ports = managedProcess.Ports;
             }
-            
-            // Kill the process
-            await KillProcess(instanceId, false, timeoutSeconds);
-            
-            // Wait a bit
-            await Task.Delay(2000);
-            
-            // Get the original command and ports
-            var command = managedProcess.Command;
-            var ports = managedProcess.Ports;
+            else
+            {
+                // Fallback: Get from ApplicationManager
+                _logger.LogWarning("Process not currently managed for instance {InstanceId}. Attempting to restart from saved state.", instanceId);
+                var instance = await _applicationManager.GetApplicationInstance(instanceId);
+                
+                if (instance == null)
+                {
+                    _logger.LogError("Instance {InstanceId} not found in state", instanceId);
+                    return false;
+                }
+                
+                command = instance.Command;
+                ports = instance.Ports;
+            }
             
             if (command == null)
             {
@@ -433,37 +461,122 @@ public class ProcessManager : IProcessManagerInternal
     {
         try
         {
+            _logger.LogInformation("Starting process reattachment...");
+            
             var instances = await _applicationManager.GetAllInstances();
+            var totalInstances = instances.Count;
+            var reattachedCount = 0;
+            var skippedNotRunning = 0;
+            var skippedNoProcessId = 0;
+            var skippedAlreadyManaged = 0;
+            var skippedProcessNotFound = 0;
+            var skippedProcessExited = 0;
+            
+            _logger.LogInformation("Found {TotalInstances} instances in saved state", totalInstances);
+            
             foreach (var instance in instances)
             {
-                if (instance.Status != Enums.ApplicationStatus.Running ||
-                    !instance.ProcessId.HasValue)
+                if (instance.Status != Enums.ApplicationStatus.Running)
                 {
+                    skippedNotRunning++;
+                    _logger.LogDebug(
+                        "Skipping instance {InstanceId} - Status is {Status}, not Running",
+                        instance.InstanceId, instance.Status);
+                    continue;
+                }
+                
+                if (!instance.ProcessId.HasValue)
+                {
+                    skippedNoProcessId++;
+                    _logger.LogWarning(
+                        "Skipping instance {InstanceId} - No ProcessId in saved state (Status: {Status})",
+                        instance.InstanceId, instance.Status);
                     continue;
                 }
                 
                 if (_managedProcesses.ContainsKey(instance.InstanceId))
                 {
+                    skippedAlreadyManaged++;
+                    _logger.LogDebug(
+                        "Skipping instance {InstanceId} - Already being managed",
+                        instance.InstanceId);
                     continue;
                 }
                 
-                Process process;
+                Process? process = null;
                 try
                 {
                     process = Process.GetProcessById(instance.ProcessId.Value);
+                    
                     if (process.HasExited)
                     {
-                        continue;
+                        skippedProcessExited++;
+                        _logger.LogInformation(
+                            "Primary PID {ProcessId} for instance {InstanceId} has exited. Attempting to find replacement process...",
+                            instance.ProcessId.Value, instance.InstanceId);
+                        process = null; // Signal to try fallback
+                    }
+                    else
+                    {
+                        _logger.LogDebug(
+                            "Found running process {ProcessId} ({ProcessName}) for instance {InstanceId}",
+                            process.Id, process.ProcessName, instance.InstanceId);
                     }
                 }
-                catch
+                catch (ArgumentException)
                 {
+                    skippedProcessNotFound++;
+                    _logger.LogWarning(
+                        "Process {ProcessId} not found for instance {InstanceId}. Attempting to find replacement process...",
+                        instance.ProcessId.Value, instance.InstanceId);
+                    process = null;
+                }
+                catch (Exception ex)
+                {
+                    skippedProcessNotFound++;
+                    _logger.LogError(ex,
+                        "Error accessing process {ProcessId} for instance {InstanceId}. Attempting to find replacement process...",
+                        instance.ProcessId.Value, instance.InstanceId);
+                    process = null;
+                }
+
+                // Fallback: Try to find process by executable path
+                if (process == null && instance.Command != null && !string.IsNullOrEmpty(instance.Command.ExecutablePath))
+                {
+                    try
+                    {
+                        process = FindMatchingProcess(instance.Command.ExecutablePath);
+                        if (process != null)
+                        {
+                            _logger.LogInformation(
+                                "Found replacement process {ProcessId} ({ProcessName}) for instance {InstanceId}",
+                                process.Id, process.ProcessName, instance.InstanceId);
+                            
+                            // Update instance with new ProcessId
+                            instance.ProcessId = process.Id;
+                            instance.Status = Enums.ApplicationStatus.Running; // Ensure status is Running
+                            
+                            // Update statistics to reflect recovery
+                            if (skippedProcessExited > 0) skippedProcessExited--;
+                            if (skippedProcessNotFound > 0) skippedProcessNotFound--;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Error searching for replacement process for {InstanceId}", instance.InstanceId);
+                    }
+                }
+
+                if (process == null)
+                {
+                    // Final check - still no process found
                     continue;
                 }
                 
                 var managedProcess = new ManagedProcess
                 {
                     Process = process,
+                    ProcessId = process.Id,
                     InstanceId = instance.InstanceId,
                     ApplicationId = instance.ApplicationId,
                     Command = instance.Command,
@@ -477,10 +590,39 @@ public class ProcessManager : IProcessManagerInternal
                 _processIdToInstanceId[process.Id] = instance.InstanceId;
                 
                 _logger.LogInformation(
-                    "Reattached to existing process {ProcessId} for instance {InstanceId}",
-                    process.Id, instance.InstanceId);
+                    "✓ Reattached to process {ProcessId} ({ProcessName}) for instance {InstanceId} (App: {AppId})",
+                    process.Id, process.ProcessName, instance.InstanceId, instance.ApplicationId);
                 
+                // Start background monitoring for this process
                 _ = Task.Run(() => MonitorProcess(managedProcess));
+                
+                reattachedCount++;
+            }
+            
+            // Log summary
+            _logger.LogInformation(
+                "Process reattachment complete: {ReattachedCount} reattached, {SkippedTotal} skipped " +
+                "(NotRunning: {SkippedNotRunning}, NoProcessId: {SkippedNoProcessId}, " +
+                "ProcessNotFound: {SkippedProcessNotFound}, ProcessExited: {SkippedProcessExited}, " +
+                "AlreadyManaged: {SkippedAlreadyManaged})",
+                reattachedCount,
+                skippedNotRunning + skippedNoProcessId + skippedProcessNotFound + skippedProcessExited + skippedAlreadyManaged,
+                skippedNotRunning,
+                skippedNoProcessId,
+                skippedProcessNotFound,
+                skippedProcessExited,
+                skippedAlreadyManaged);
+                
+            if (reattachedCount > 0)
+            {
+                _logger.LogInformation("Successfully resumed monitoring for {Count} running instance(s)", reattachedCount);
+            }
+            else if (totalInstances > 0)
+            {
+                _logger.LogWarning(
+                    "No processes were reattached from {TotalInstances} instance(s) in saved state. " +
+                    "This is normal if all processes had exited before agent restart.",
+                    totalInstances);
             }
         }
         catch (Exception ex)
@@ -632,7 +774,7 @@ public class ProcessManager : IProcessManagerInternal
         {
             // Remove from tracking dictionaries
             _managedProcesses.TryRemove(managedProcess.InstanceId, out _);
-            _processIdToInstanceId.TryRemove(managedProcess.Process.Id, out _);
+            _processIdToInstanceId.TryRemove(managedProcess.ProcessId, out _);
             
             // Release ports
             if (managedProcess.Ports.Any())
@@ -792,7 +934,7 @@ public class ProcessManager : IProcessManagerInternal
             {
                 InstanceId = managedProcess.InstanceId,
                 ApplicationId = managedProcess.ApplicationId,
-                ProcessId = managedProcess.Process.Id,
+                ProcessId = managedProcess.ProcessId,
                 ExitCode = exitCode,
                 StartTime = managedProcess.StartTime,
                 EndTime = DateTime.UtcNow,
@@ -810,6 +952,46 @@ public class ProcessManager : IProcessManagerInternal
             _logger.LogError(ex, "Failed to log process exit for instance {InstanceId}", 
                 managedProcess.InstanceId);
         }
+    }
+
+    private Process? FindMatchingProcess(string executablePath)
+    {
+        try
+        {
+            var fileName = Path.GetFileNameWithoutExtension(executablePath);
+            var processes = Process.GetProcessesByName(fileName);
+
+            foreach (var process in processes)
+            {
+                try
+                {
+                    // Accessing MainModule can throw if the process is elevated and we are not,
+                    // or if the process is 64-bit and we are 32-bit (or vice versa in some cases).
+                    // We also normalize paths to compare them robustly.
+                    if (process.MainModule != null && 
+                        string.Equals(Path.GetFullPath(process.MainModule.FileName), Path.GetFullPath(executablePath), StringComparison.OrdinalIgnoreCase))
+                    {
+                        // Check if this process is already managed by us
+                        if (_processIdToInstanceId.ContainsKey(process.Id))
+                        {
+                            continue;
+                        }
+                        
+                        return process;
+                    }
+                }
+                catch (Exception)
+                {
+                    // Ignore processes we can't inspect (access denied, etc.)
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error finding matching process for {Path}", executablePath);
+        }
+
+        return null;
     }
 }
 
@@ -846,6 +1028,7 @@ public class ProcessSpawnResult
 public class ManagedProcess
 {
     public Process Process { get; set; } = null!;
+    public int ProcessId { get; set; }
     public string InstanceId { get; set; } = string.Empty;
     public string ApplicationId { get; set; } = string.Empty;
     public SpawnCommand? Command { get; set; }

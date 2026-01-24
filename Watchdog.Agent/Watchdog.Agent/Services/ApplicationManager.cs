@@ -533,5 +533,125 @@ namespace Watchdog.Agent.Services
                 _logger.LogError(ex, "Failed to save state");
             }
         }
+        public async Task SyncInstancesFromApi(List<Watchdog.Agent.Protos.ApplicationStatus> activeInstances)
+        {
+            _logger.LogInformation("Syncing {Count} instances from Control Plane...", activeInstances.Count);
+            
+            var apiInstanceIds = activeInstances.Select(i => i.InstanceId).ToHashSet();
+            
+            // 1. Remove local instances no longer known by API
+            var removedCount = 0;
+            foreach (var localId in _instances.Keys)
+            {
+                if (!apiInstanceIds.Contains(localId))
+                {
+                    if (_instances.TryRemove(localId, out _))
+                    {
+                        removedCount++;
+                    }
+                }
+            }
+            
+            if (removedCount > 0)
+            {
+                _logger.LogInformation("Removed {Count} local instances not found in Control Plane state", removedCount);
+            }
+
+            // 2. Add or Update instances from API
+            foreach (var apiInstance in activeInstances)
+            {
+                // We only care about instances the API thinks are Running
+                if (apiInstance.Status != "Running") continue;
+                
+                // Check if we already know about this instance
+                if (_instances.TryGetValue(apiInstance.InstanceId, out var localInstance))
+                {
+                    // Ensure local status reflects API's expectation 
+                    // so we give ReattachProcesses a chance to find it.
+                    if (localInstance.Status != Enums.ApplicationStatus.Running)
+                    {
+                        _logger.LogInformation("Updating local status for instance {InstanceId} from {OldStatus} to Running to match Control Plane", 
+                            apiInstance.InstanceId, localInstance.Status);
+                        localInstance.Status = Enums.ApplicationStatus.Running;
+                    }
+
+                    // Sync the PID from API if we don't have one (or it's different)
+                    if (int.TryParse(apiInstance.ProcessId, out int pid) && pid > 0)
+                    {
+                        // Preference: If we already have a PID locally and it's running, keep it?
+                        // For now, let the API's PID override if ours is missing or different.
+                        if (!localInstance.ProcessId.HasValue || localInstance.ProcessId != pid)
+                        {
+                            localInstance.ProcessId = pid;
+                        }
+                    }
+                }
+                else
+                {
+                    // API knows about an instance we don't have in local state (maybe state file lost)
+                    // We need to construct a ManagedApplication from the API info + App Config
+                    
+                    var appConfig = await GetApplicationConfig(apiInstance.ApplicationId);
+                    if (appConfig == null)
+                    {
+                        _logger.LogWarning("Unknown application {AppId} for instance {InstanceId}. Cannot sync from API yet.", 
+                            apiInstance.ApplicationId, apiInstance.InstanceId);
+                        continue;
+                    }
+
+                    // Reconstruct ManagedApplication
+                    var managedApp = new ManagedApplication
+                    {
+                        InstanceId = apiInstance.InstanceId,
+                        ApplicationId = apiInstance.ApplicationId,
+                        Status = Enums.ApplicationStatus.Running,
+                        ProcessId = int.TryParse(apiInstance.ProcessId, out int pid) ? pid : null,
+                        CreatedAt = DateTimeOffset.FromUnixTimeSeconds(apiInstance.StartTime).UtcDateTime,
+                        StartedAt = DateTimeOffset.FromUnixTimeSeconds(apiInstance.StartTime).UtcDateTime,
+                        Command = new SpawnCommand 
+                        {
+                            ApplicationId = appConfig.Id,
+                            InstanceId = apiInstance.InstanceId,
+                            ExecutablePath = appConfig.ExecutablePath,
+                            Arguments = appConfig.Arguments,
+                            WorkingDirectory = appConfig.WorkingDirectory,
+                            HealthCheckUrl = appConfig.HealthCheckUrl,
+                            HealthCheckInterval = appConfig.HealthCheckInterval
+                        }
+                    };
+                    
+                    // Recover ports if available
+                    if (apiInstance.Ports != null)
+                    {
+                        foreach (var p in apiInstance.Ports)
+                        {
+                            managedApp.Ports.Add(new Watchdog.Agent.Protos.PortMapping 
+                            { 
+                                Name = p.Name,
+                                InternalPort = p.InternalPort,
+                                ExternalPort = p.ExternalPort,
+                                Protocol = p.Protocol
+                            });
+                        }
+                    }
+                    
+                    _instances[managedApp.InstanceId] = managedApp;
+                }
+            }
+            
+            // Save authoritative state
+            await SaveState();
+            
+            // Now that we've populated _instances with what API expects,
+            // ReattachProcesses will verify if they actually exist.
+            // Any "Running" instance that ReattachProcesses fails to find/recover 
+            // should be reported as Stopped.
+            
+            // Note: We deliberately do NOT immediately report stopped here. 
+            // We let the AgentWorker call ReattachProcesses next, which triggers discovery.
+            // But we need a way to detect "Missing" after ReattachProcesses.
+            // See AgentWorker update.
+        }
+
     }
 }

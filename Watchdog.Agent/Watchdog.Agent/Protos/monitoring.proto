@@ -59,6 +59,7 @@ message AgentRegistrationResponse {
   string message = 2;
   string assigned_id = 3;
   repeated ApplicationAssignment applications = 4;
+  repeated ApplicationStatus active_instances = 5;
 }
 
 message StatusReportResponse {
@@ -174,6 +175,8 @@ message ErrorReport {
   string error_message = 3;
   string stack_trace = 4;
   int64 timestamp = 5;
+  string instance_id = 6;
+  string application_id = 7;
 }
 
 message SystemMetrics {

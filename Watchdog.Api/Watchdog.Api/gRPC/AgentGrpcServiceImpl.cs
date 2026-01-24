@@ -15,6 +15,7 @@ public class AgentGrpcServiceImpl : AgentService.AgentServiceBase
     private readonly IDbConnectionFactory _connectionFactory;
     private readonly IAgentManager _agentManager;
     private readonly IApplicationManager _applicationManager;
+    private readonly IApplicationRepository _applicationRepository;
     private readonly ICommandService _commandService;
     private readonly IAgentGrpcService _agentGrpcService;
     private readonly ILogger<AgentGrpcServiceImpl> _logger;
@@ -23,6 +24,7 @@ public class AgentGrpcServiceImpl : AgentService.AgentServiceBase
         IDbConnectionFactory connectionFactory,
         IAgentManager agentManager,
         IApplicationManager applicationManager,
+        IApplicationRepository applicationRepository,
         ICommandService commandService,
         IAgentGrpcService agentGrpcService,
         ILogger<AgentGrpcServiceImpl> logger)
@@ -30,6 +32,7 @@ public class AgentGrpcServiceImpl : AgentService.AgentServiceBase
         _connectionFactory = connectionFactory;
         _agentManager = agentManager;
         _applicationManager = applicationManager;
+        _applicationRepository = applicationRepository;
         _commandService = commandService;
         _agentGrpcService = agentGrpcService;
         _logger = logger;
@@ -88,13 +91,54 @@ public class AgentGrpcServiceImpl : AgentService.AgentServiceBase
                     });
                 }
             }
+            // Get active instances for this agent
+            var activeInstances = await _applicationRepository.GetActiveInstancesForAgent(agent.Id);
+            var activeInstanceStatuses = activeInstances.Select(i => new Watchdog.Api.Protos.ApplicationStatus
+            {
+                InstanceId = i.InstanceId,
+                ApplicationId = i.ApplicationId,
+                Status = i.Status,
+                CpuPercent = i.CpuPercent ?? 0,
+                MemoryMb = i.MemoryMB ?? 0,
+                HealthStatus = "Unknown", // API doesn't store this explicitly properly yet, inferred from status
+                StartTime = i.StartedAt.HasValue ? ((DateTimeOffset)i.StartedAt.Value).ToUnixTimeSeconds() : 0,
+                ProcessId = i.ProcessId?.ToString() ?? "0"
+            }).ToList();
+            
+            // Add assigned ports
+            foreach (var instanceStatus in activeInstanceStatuses)
+            {
+                var originalInstance = activeInstances.First(i => i.InstanceId == instanceStatus.InstanceId);
+                if (!string.IsNullOrEmpty(originalInstance.AssignedPorts))
+                {
+                    try 
+                    {
+                        var ports = JsonSerializer.Deserialize<List<PortMapping>>(originalInstance.AssignedPorts);
+                        if (ports != null)
+                        {
+                             instanceStatus.Ports.AddRange(ports.Select(p => new Watchdog.Api.Protos.PortMapping
+                             {
+                                 Name = p.Name ?? "",
+                                 InternalPort = p.InternalPort,
+                                 ExternalPort = p.ExternalPort,
+                                 Protocol = p.Protocol ?? "TCP"
+                             }));
+                        }
+                    }
+                    catch
+                    {
+                        // Ignore parsing errors
+                    }
+                }
+            }
             
             return new AgentRegistrationResponse
             {
                 Success = true,
                 Message = "Registration successful",
                 AssignedId = agent.Id,
-                Applications = { applicationAssignments }
+                Applications = { applicationAssignments },
+                ActiveInstances = { activeInstanceStatuses }
             };
         }
         catch (Exception ex)
@@ -121,11 +165,18 @@ public class AgentGrpcServiceImpl : AgentService.AgentServiceBase
             // Process application statuses
             foreach (var appStatus in request.ApplicationStatuses)
             {
+                int? processId = null;
+                if (int.TryParse(appStatus.ProcessId, out int pid) && pid > 0)
+                {
+                    processId = pid;
+                }
+
                 await _applicationManager.UpdateInstanceStatus(
                     appStatus.InstanceId,
                     appStatus.Status,
                     appStatus.CpuPercent,
-                    appStatus.MemoryMb);
+                    appStatus.MemoryMb,
+                    processId);
                 
                 // If application just spawned, record ports
                 if (appStatus.Status == "Running" && appStatus.Ports.Any())
@@ -311,8 +362,22 @@ public class AgentGrpcServiceImpl : AgentService.AgentServiceBase
                 case AgentMessage.MessageOneofCase.Error:
                     var error = message.Error;
                     _logger.LogError(
-                        "Error from agent {AgentId}: {ErrorType} - {ErrorMessage}",
-                        agentId, error.ErrorType, error.ErrorMessage);
+                        "Error from agent {AgentId}: {ErrorType} - {ErrorMessage} (Instance: {InstanceId})",
+                        agentId, error.ErrorType, error.ErrorMessage, error.InstanceId);
+                        
+                    // Auto-restart logic for critical errors
+                    if (!string.IsNullOrEmpty(error.InstanceId) && IsCriticalError(error.ErrorType))
+                    {
+                        _logger.LogWarning("Auto-restarting instance {InstanceId} due to critical error: {ErrorType}", 
+                            error.InstanceId, error.ErrorType);
+                            
+                        // Use the high-level QueueRestartCommand which triggers immediate delivery
+                        await _commandService.QueueRestartCommand(agentId, error.ApplicationId, error.InstanceId);
+                    }
+                    else if (string.IsNullOrEmpty(error.InstanceId) && IsCriticalError(error.ErrorType))
+                    {
+                        _logger.LogWarning("Received critical error {ErrorType} but no InstanceId was provided. Cannot auto-restart.", error.ErrorType);
+                    }
                     break;
             }
         }
@@ -320,6 +385,18 @@ public class AgentGrpcServiceImpl : AgentService.AgentServiceBase
         {
             _logger.LogError(ex, "Error processing message from agent {AgentId}", agentId);
         }
+    }
+    
+    private bool IsCriticalError(string errorType)
+    {
+        return errorType switch
+        {
+            "HealthCheckFailed" => true,
+            "ProcessExited" => true,
+            "ResourceExceeded" => true,
+            "HungProcess" => true,
+            _ => false
+        };
     }
     
     private async Task SendPendingCommandsToAgentAsync(
@@ -438,6 +515,15 @@ public class AgentGrpcServiceImpl : AgentService.AgentServiceBase
                     InstanceId = cmd.InstanceId,
                     Force = true,
                     TimeoutSeconds = 30
+                };
+                break;
+                
+            case "RESTART":
+                var restartParams = JsonSerializer.Deserialize<RestartCommandParams>(cmd.Parameters);
+                message.Restart = new RestartCommand
+                {
+                    InstanceId = cmd.InstanceId,
+                    TimeoutSeconds = restartParams?.TimeoutSeconds ?? 30
                 };
                 break;
         }

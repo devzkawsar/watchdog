@@ -47,14 +47,16 @@ public class AgentWorker : BackgroundService
             // Initialize application manager
             await _applicationManager.Initialize();
             
-            // Reattach to any existing processes for instances loaded from state
-            await _processManager.ReattachProcesses();
-            
-            // Auto-register if configured
+            // Auto-register if configured (Syncs state from API)
             if (_agentSettings.Value.AutoRegister)
             {
                 await RegisterWithControlPlane(stoppingToken);
             }
+
+            // Reattach to any existing processes for instances loaded from state (local or synced)
+            _logger.LogInformation("Attempting to reattach to existing running processes...");
+            await _processManager.ReattachProcesses();
+            _logger.LogInformation("Process reattachment phase completed");
             
             // Start monitoring service
             await _monitorService.Start(stoppingToken);

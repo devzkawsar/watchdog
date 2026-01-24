@@ -21,4 +21,5 @@ public interface IApplicationManager
     Task<bool> ShouldRestartInstance(ManagedApplication instance);
     Task IncrementRestartCount(string instanceId);
     Task NotifyInstanceStopped(string instanceId, int exitCode, string reason);
+    Task SyncInstancesFromApi(List<Watchdog.Agent.Protos.ApplicationStatus> activeInstances);
 }

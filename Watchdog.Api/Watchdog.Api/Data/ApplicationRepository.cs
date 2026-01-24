@@ -150,26 +150,46 @@ public class ApplicationRepository : IApplicationRepository
         const string sql = @"
             SELECT 
                 InstanceId, ApplicationId, AgentId, ProcessId,
-                Status, CpuPercent, MemoryMB, AssignedPorts,
-                LastHealthCheck, StartedAt, StoppedAt, CreatedAt
+                Status, CpuPercent, MemoryMB, MemoryPercent, ThreadCount, HandleCount,
+                AssignedPorts, LastHealthCheck, LastHeartbeat, StartedAt, StoppedAt, 
+                CreatedAt, UpdatedAt
             FROM ApplicationInstances
             WHERE ApplicationId = @ApplicationId
             ORDER BY CreatedAt DESC";
         
         return await connection.QueryAsync<ApplicationInstance>(sql, new { ApplicationId = applicationId });
     }
+
+    public async Task<IEnumerable<ApplicationInstance>> GetActiveInstancesForAgent(string agentId)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        
+        const string sql = @"
+            SELECT 
+                InstanceId, ApplicationId, AgentId, ProcessId,
+                Status, CpuPercent, MemoryMB, MemoryPercent, ThreadCount, HandleCount,
+                AssignedPorts, LastHealthCheck, LastHeartbeat, StartedAt, StoppedAt, 
+                CreatedAt, UpdatedAt
+            FROM ApplicationInstances
+            WHERE AgentId = @AgentId AND Status = 'Running'
+            ORDER BY CreatedAt DESC";
+        
+        return await connection.QueryAsync<ApplicationInstance>(sql, new { AgentId = agentId });
+    }
     
     public async Task<int> UpdateInstanceStatus(string instanceId, string status, 
-        double? cpuPercent = null, double? memoryMB = null)
+        double? cpuPercent = null, double? memoryMB = null, int? processId = null)
     {
         using var connection = _connectionFactory.CreateConnection();
         
         const string sql = @"
             UPDATE ApplicationInstances 
             SET Status = @Status,
-                CpuPercent = ISNULL(@CpuPercent, CpuPercent),
-                MemoryMB = ISNULL(@MemoryMB, MemoryMB),
-                LastHealthCheck = GETUTCDATE()
+                CpuPercent = COALESCE(@CpuPercent, CpuPercent),
+                MemoryMB = COALESCE(@MemoryMB, MemoryMB),
+                ProcessId = COALESCE(@ProcessId, ProcessId),
+                LastHeartbeat = GETUTCDATE(),
+                UpdatedAt = GETUTCDATE()
             WHERE InstanceId = @InstanceId";
         
         return await connection.ExecuteAsync(sql, new 
@@ -177,7 +197,8 @@ public class ApplicationRepository : IApplicationRepository
             InstanceId = instanceId,
             Status = status,
             CpuPercent = cpuPercent,
-            MemoryMB = memoryMB
+            MemoryMB = memoryMB,
+            ProcessId = processId
         });
     }
 }
@@ -216,11 +237,16 @@ public class ApplicationInstance
     public string Status { get; set; } = "Pending"; // Pending, Running, Stopped, Error
     public double? CpuPercent { get; set; }
     public double? MemoryMB { get; set; }
+    public double? MemoryPercent { get; set; }
+    public int? ThreadCount { get; set; }
+    public int? HandleCount { get; set; }
     public string AssignedPorts { get; set; } = string.Empty; // JSON
     public DateTime? LastHealthCheck { get; set; }
+    public DateTime? LastHeartbeat { get; set; }
     public DateTime? StartedAt { get; set; }
     public DateTime? StoppedAt { get; set; }
     public DateTime CreatedAt { get; set; }
+    public DateTime? UpdatedAt { get; set; }
 }
 
 public class PortRequirement

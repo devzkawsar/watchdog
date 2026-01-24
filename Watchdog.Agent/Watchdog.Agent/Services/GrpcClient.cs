@@ -155,6 +155,13 @@ public class GrpcClient : IGrpcClientInternal
                     registration.Applications.ToList());
             }
 
+            // Sync active instances from control plane
+            if (registration.ActiveInstances.Any())
+            {
+               await _applicationManager.SyncInstancesFromApi(
+                   registration.ActiveInstances.ToList());
+            }
+
             // Start command streaming
             await StartCommandStreaming(cancellationToken);
 
