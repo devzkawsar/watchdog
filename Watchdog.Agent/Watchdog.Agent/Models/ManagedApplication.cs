@@ -20,4 +20,5 @@ public class ManagedApplication
     public int RestartCount { get; set; }
     public DateTime? LastRestartAttempt { get; set; }
     public string? LastError { get; set; }
+    public DateTime? ReattachedAt { get; set; }
 }

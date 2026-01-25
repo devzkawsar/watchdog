@@ -187,9 +187,11 @@ public class MonitorService : IMonitorServiceInternal
         try
         {
             var instances = await _applicationManager.GetAllInstances();
-            var runningInstances = instances.Where(i => i.Status == Enums.ApplicationStatus.Running);
+            var instancesToCheck = instances.Where(i => 
+                i.Status == Enums.ApplicationStatus.Running || 
+                i.Status == Enums.ApplicationStatus.Unhealthy);
             
-            foreach (var instance in runningInstances)
+            foreach (var instance in instancesToCheck)
             {
                 var isHealthy = await CheckHealth(instance.InstanceId);
                 
@@ -203,6 +205,18 @@ public class MonitorService : IMonitorServiceInternal
                 
                 if (!isHealthy)
                 {
+                    // Respect grace period
+                    bool inGracePeriod = instance.ReattachedAt.HasValue && 
+                                         (DateTime.UtcNow - instance.ReattachedAt.Value).TotalMinutes < 2;
+
+                    if (inGracePeriod)
+                    {
+                        _logger.LogInformation(
+                            "Health check failed for instance {InstanceId} but it is within grace period. Skipping status update.",
+                            instance.InstanceId);
+                        continue;
+                    }
+
                     _logger.LogWarning(
                         "Health check failed for instance {InstanceId}",
                         instance.InstanceId);
@@ -214,6 +228,18 @@ public class MonitorService : IMonitorServiceInternal
                 }
                 else
                 {
+                    // If it was unhealthy and is now healthy, transition back to Running
+                    if (instance.Status == Enums.ApplicationStatus.Unhealthy)
+                    {
+                        _logger.LogInformation(
+                            "Instance {InstanceId} recovered and is now healthy",
+                            instance.InstanceId);
+                        
+                        await _applicationManager.UpdateInstanceStatus(
+                            instance.InstanceId,
+                            Enums.ApplicationStatus.Running);
+                    }
+                    
                     // Update last health check time
                     instance.LastHealthCheck = DateTime.UtcNow;
                 }
@@ -367,8 +393,19 @@ public class MonitorService : IMonitorServiceInternal
                 
                 // Check health
                 var isHealthy = await CheckHealth(instance.InstanceId);
+                
+                // Grace period for reattached processes: skip unhealthy reporting for first 2 minutes
+                bool inGracePeriod = instance.ReattachedAt.HasValue && 
+                                     (DateTime.UtcNow - instance.ReattachedAt.Value).TotalMinutes < 2;
+
                 if (!isHealthy)
                 {
+                    if (inGracePeriod)
+                    {
+                        _logger.LogInformation("Instance {InstanceId} failed health check but is within grace period. Skipping failure report.", instance.InstanceId);
+                        return detection;
+                    }
+
                     await _applicationManager.UpdateInstanceStatus(instance.InstanceId, Enums.ApplicationStatus.Unhealthy);
                     detection.IsFailure = true;
                     detection.Reason = "Health check failed";
@@ -377,9 +414,9 @@ public class MonitorService : IMonitorServiceInternal
                     return detection;
                 }
                 
-                // Check resource usage
+                // Check resource usage (also skip during grace period to allow initialization)
                 var metrics = await _processManager.GetProcessMetrics(instance.InstanceId);
-                if (metrics != null)
+                if (metrics != null && !inGracePeriod)
                 {
                     if (metrics.CpuPercent > _monitoringSettings.Value.MaxCpuThreshold)
                     {
@@ -479,6 +516,18 @@ public class MonitorService : IMonitorServiceInternal
                 InstanceId = failure.InstanceId,
                 ApplicationId = failure.ApplicationId
             });
+
+            // If the health check failed or it's a resource/hung issue, kill the process.
+            // This satisfies the user requirement: "if Health check failed... then kill that instance from the system"
+            if (failure.FailureType == FailureType.HealthCheckFailed ||
+                failure.FailureType == FailureType.ResourceExceeded ||
+                failure.FailureType == FailureType.HungProcess)
+            {
+                _logger.LogWarning("Forcing termination of instance {InstanceId} due to {FailureType}", 
+                    failure.InstanceId, failure.FailureType);
+                
+                await _processManager.KillProcess(failure.InstanceId, force: true);
+            }
         }
         catch (Exception ex)
         {

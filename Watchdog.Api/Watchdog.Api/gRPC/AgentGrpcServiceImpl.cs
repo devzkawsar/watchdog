@@ -171,9 +171,13 @@ public class AgentGrpcServiceImpl : AgentService.AgentServiceBase
                     processId = pid;
                 }
 
+                var status = NormalizeStatus(appStatus.Status);
+                _logger.LogInformation("Updating instance {InstanceId} status to {Status} (Original: {OriginalStatus})", 
+                    appStatus.InstanceId, status, appStatus.Status);
+                
                 await _applicationManager.UpdateInstanceStatus(
                     appStatus.InstanceId,
-                    appStatus.Status,
+                    status,
                     appStatus.CpuPercent,
                     appStatus.MemoryMb,
                     processId);
@@ -444,12 +448,26 @@ public class AgentGrpcServiceImpl : AgentService.AgentServiceBase
         using var connection = _connectionFactory.CreateConnection();
         
         const string sql = @"
-            INSERT INTO ApplicationInstances 
-                (InstanceId, ApplicationId, AgentId, ProcessId, Status, 
-                 AssignedPorts, StartedAt, CreatedAt)
-            VALUES 
-                (@InstanceId, @ApplicationId, @AgentId, @ProcessId, 'Running',
-                 @AssignedPorts, @StartedAt, GETUTCDATE())";
+            IF EXISTS (SELECT 1 FROM ApplicationInstances WHERE InstanceId = @InstanceId)
+            BEGIN
+                UPDATE ApplicationInstances 
+                SET ProcessId = @ProcessId, 
+                    Status = 'Running', 
+                    AssignedPorts = @AssignedPorts, 
+                    StartedAt = @StartedAt,
+                    LastHeartbeat = GETUTCDATE(),
+                    UpdatedAt = GETUTCDATE()
+                WHERE InstanceId = @InstanceId
+            END
+            ELSE
+            BEGIN
+                INSERT INTO ApplicationInstances 
+                    (InstanceId, ApplicationId, AgentId, ProcessId, Status, 
+                     AssignedPorts, StartedAt, CreatedAt)
+                VALUES 
+                    (@InstanceId, @ApplicationId, @AgentId, @ProcessId, 'Running',
+                     @AssignedPorts, @StartedAt, GETUTCDATE())
+            END";
         
         await connection.ExecuteAsync(sql, new
         {
@@ -529,6 +547,20 @@ public class AgentGrpcServiceImpl : AgentService.AgentServiceBase
         }
         
         return Task.FromResult(message);
+    }
+
+    private string NormalizeStatus(string status)
+    {
+        if (string.IsNullOrEmpty(status)) return "Running";
+
+        var allowed = new[] { "Pending", "Starting", "Running", "Stopping", "Stopped", "Error" };
+        foreach (var s in allowed)
+        {
+            if (string.Equals(s, status, StringComparison.OrdinalIgnoreCase))
+                return s;
+        }
+
+        return "Running"; // Default to Running if unknown to satisfy constraint
     }
 }
 

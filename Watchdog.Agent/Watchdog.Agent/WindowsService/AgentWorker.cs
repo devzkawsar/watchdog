@@ -2,6 +2,8 @@ using Watchdog.Agent.Configuration;
 using Watchdog.Agent.Services;
 using Microsoft.Extensions.Options;
 using Watchdog.Agent.Interface;
+using Watchdog.Agent.Protos;
+
 
 namespace Watchdog.Agent.WindowsService;
 
@@ -55,8 +57,30 @@ public class AgentWorker : BackgroundService
 
             // Reattach to any existing processes for instances loaded from state (local or synced)
             _logger.LogInformation("Attempting to reattach to existing running processes...");
-            await _processManager.ReattachProcesses();
-            _logger.LogInformation("Process reattachment phase completed");
+            var reattached = await _processManager.ReattachProcesses();
+            _logger.LogInformation("Process reattachment phase completed. Reattached to {Count} processes.", reattached.Count);
+
+            // Notify API about reattached processes
+            foreach (var managed in reattached)
+            {
+                try
+                {
+                    await _grpcClient.SendApplicationSpawned(new ApplicationSpawned
+                    {
+                        InstanceId = managed.InstanceId,
+                        ApplicationId = managed.ApplicationId,
+                        ProcessId = managed.ProcessId,
+                        Ports = { managed.Ports },
+                        StartTime = new DateTimeOffset(managed.StartTime).ToUnixTimeSeconds()
+                    }, stoppingToken);
+                    
+                    _logger.LogInformation("Notified API about reattached instance {InstanceId}", managed.InstanceId);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to notify API about reattached instance {InstanceId}", managed.InstanceId);
+                }
+            }
             
             // Start monitoring service
             await _monitorService.Start(stoppingToken);
@@ -83,22 +107,22 @@ public class AgentWorker : BackgroundService
             _logger.LogInformation("Watchdog Agent worker started successfully");
             
             // Main loop
-            // while (!stoppingToken.IsCancellationRequested && _isRunning)
-            // {
-            //     try
-            //     {
-            //         await Task.Delay(TimeSpan.FromSeconds(1), stoppingToken);
-            //     }
-            //     catch (OperationCanceledException)
-            //     {
-            //         break;
-            //     }
-            //     catch (Exception ex)
-            //     {
-            //         _logger.LogError(ex, "Error in agent worker main loop");
-            //         await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken);
-            //     }
-            // }
+            while (!stoppingToken.IsCancellationRequested && _isRunning)
+            {
+                try
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(1), stoppingToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error in agent worker main loop");
+                    await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken);
+                }
+            }
         }
         catch (Exception ex)
         {

@@ -46,6 +46,72 @@ public class ProcessManager : IProcessManagerInternal
         
         try
         {
+            
+            // 1. Check if instance is already managed and running
+            if (_managedProcesses.TryGetValue(command.InstanceId, out var existingManaged))
+            {
+                try
+                {
+                    if (!existingManaged.Process.HasExited)
+                    {
+                        // Check if it's the same executable (basic check)
+                        if (string.Equals(Path.GetFullPath(existingManaged.Command?.ExecutablePath ?? ""), 
+                                          Path.GetFullPath(command.ExecutablePath), 
+                                          StringComparison.OrdinalIgnoreCase))
+                        {
+                            _logger.LogInformation(
+                                "Instance {InstanceId} is already managed and running. Skipping spawn.",
+                                command.InstanceId);
+                            
+                            // Ensure ports are synchronized if they changed in the command 
+                            // (though typically they shouldn't for a running instance)
+                            return ProcessSpawnResult.Succeeded(existingManaged.ProcessId, existingManaged.Ports);
+                        }
+                        
+                        _logger.LogWarning(
+                            "Instance {InstanceId} is running but with a different configuration. Killing old process before spawn.",
+                            command.InstanceId);
+                            
+                        await KillProcess(command.InstanceId, force: true);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Error checking existing managed process for {InstanceId}", command.InstanceId);
+                }
+            }
+
+            // 2. Check if there's an orphaned process on the system that we should adopt
+            var instance = await _applicationManager.GetApplicationInstance(command.InstanceId);
+            if (instance != null && instance.ProcessId.HasValue)
+            {
+                try
+                {
+                    var orphanedProcess = Process.GetProcessById(instance.ProcessId.Value);
+                    if (!orphanedProcess.HasExited && 
+                        string.Equals(Path.GetFullPath(orphanedProcess.MainModule?.FileName ?? ""), 
+                                      Path.GetFullPath(command.ExecutablePath), 
+                                      StringComparison.OrdinalIgnoreCase))
+                    {
+                        _logger.LogInformation(
+                            "Found orphaned process {Pid} for instance {InstanceId}. Adopting and skipping spawn.", 
+                            orphanedProcess.Id, command.InstanceId);
+                        
+                        // Update command with latest if it was rebuilt from sync
+                        instance.Command = command;
+                        instance.Ports = ports;
+                        
+                        await RegisterManagedProcessAsync(instance, orphanedProcess);
+                        return ProcessSpawnResult.Succeeded(orphanedProcess.Id, ports);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(ex, "Orphan check failed for instance {InstanceId} PID {Pid}", 
+                        command.InstanceId, instance.ProcessId);
+                }
+            }
+
             _logger.LogInformation(
                 "Spawning process for application {AppId} instance {InstanceId}",
                 command.ApplicationId, command.InstanceId);
@@ -457,8 +523,9 @@ public class ProcessManager : IProcessManagerInternal
         }
     }
     
-    public async Task ReattachProcesses()
+    public async Task<List<ManagedProcess>> ReattachProcesses()
     {
+        var reattachedProcesses = new List<ManagedProcess>();
         try
         {
             _logger.LogInformation("Starting process reattachment...");
@@ -476,19 +543,10 @@ public class ProcessManager : IProcessManagerInternal
             
             foreach (var instance in instances)
             {
-                if (instance.Status != Enums.ApplicationStatus.Running)
-                {
-                    skippedNotRunning++;
-                    _logger.LogDebug(
-                        "Skipping instance {InstanceId} - Status is {Status}, not Running",
-                        instance.InstanceId, instance.Status);
-                    continue;
-                }
-                
                 if (!instance.ProcessId.HasValue)
                 {
                     skippedNoProcessId++;
-                    _logger.LogWarning(
+                    _logger.LogDebug(
                         "Skipping instance {InstanceId} - No ProcessId in saved state (Status: {Status})",
                         instance.InstanceId, instance.Status);
                     continue;
@@ -573,29 +631,8 @@ public class ProcessManager : IProcessManagerInternal
                     continue;
                 }
                 
-                var managedProcess = new ManagedProcess
-                {
-                    Process = process,
-                    ProcessId = process.Id,
-                    InstanceId = instance.InstanceId,
-                    ApplicationId = instance.ApplicationId,
-                    Command = instance.Command,
-                    Ports = instance.Ports ?? new List<PortMapping>(),
-                    StartTime = instance.StartedAt ?? DateTime.UtcNow,
-                    StdOutPath = string.Empty,
-                    StdErrPath = string.Empty
-                };
-                
-                _managedProcesses[instance.InstanceId] = managedProcess;
-                _processIdToInstanceId[process.Id] = instance.InstanceId;
-                
-                _logger.LogInformation(
-                    "✓ Reattached to process {ProcessId} ({ProcessName}) for instance {InstanceId} (App: {AppId})",
-                    process.Id, process.ProcessName, instance.InstanceId, instance.ApplicationId);
-                
-                // Start background monitoring for this process
-                _ = Task.Run(() => MonitorProcess(managedProcess));
-                
+                var managed = await RegisterManagedProcessAsync(instance, process);
+                reattachedProcesses.Add(managed);
                 reattachedCount++;
             }
             
@@ -629,8 +666,45 @@ public class ProcessManager : IProcessManagerInternal
         {
             _logger.LogError(ex, "Error reattaching to existing processes");
         }
+
+        return reattachedProcesses;
     }
     
+    private async Task<ManagedProcess> RegisterManagedProcessAsync(ManagedApplication instance, Process process)
+    {
+        var managedProcess = new ManagedProcess
+        {
+            Process = process,
+            ProcessId = process.Id,
+            InstanceId = instance.InstanceId,
+            ApplicationId = instance.ApplicationId,
+            Command = instance.Command,
+            Ports = instance.Ports ?? new List<PortMapping>(),
+            StartTime = instance.StartedAt ?? DateTime.UtcNow,
+            StdOutPath = string.Empty,
+            StdErrPath = string.Empty
+        };
+
+        _managedProcesses[instance.InstanceId] = managedProcess;
+        _processIdToInstanceId[process.Id] = instance.InstanceId;
+
+        // Update status to Running since it's actually running
+        await _applicationManager.UpdateInstanceStatus(
+            instance.InstanceId,
+            Enums.ApplicationStatus.Running,
+            process.Id,
+            reattachedAt: DateTime.UtcNow);
+
+        _logger.LogInformation(
+            "✓ adoption completed: Registered monitoring for process {ProcessId} ({ProcessName}) for instance {InstanceId}",
+            process.Id, process.ProcessName, instance.InstanceId);
+
+        // Start background monitoring for this process
+        _ = Task.Run(() => MonitorProcess(managedProcess));
+
+        return managedProcess;
+    }
+
     private Dictionary<string, string> BuildEnvironmentVariables(
         SpawnCommand command, 
         List<PortMapping> ports, 

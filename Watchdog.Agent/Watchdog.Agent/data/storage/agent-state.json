@@ -28,22 +28,33 @@
   ],
   "Instances": [
     {
-      "InstanceId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8-local-agent-01-24b0c4f9776d49538b2b1c426acc65b9",
+      "InstanceId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8-local-agent-01-ef89d4445a3f44988a510dd6aa3dfcad",
       "ApplicationId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8",
       "Command": {
         "ApplicationId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8",
-        "InstanceId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8-local-agent-01-24b0c4f9776d49538b2b1c426acc65b9",
+        "InstanceId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8-local-agent-01-ef89d4445a3f44988a510dd6aa3dfcad",
         "ExecutablePath": "D:\\Project\\watchdog\\TestConsole\\TestConsole\\bin\\Release\\net9.0\\TestConsole.exe",
         "Arguments": "string",
         "WorkingDirectory": "D:\\Project\\watchdog\\TestConsole\\TestConsole\\bin\\Release\\net9.0",
-        "EnvironmentVariables": {},
-        "Ports": [],
+        "EnvironmentVariables": {
+          "additionalProp1": "string",
+          "additionalProp2": "string",
+          "additionalProp3": "string"
+        },
+        "Ports": [
+          {
+            "Name": "port-0",
+            "InternalPort": 30000,
+            "ExternalPort": 30000,
+            "Protocol": "TCP"
+          }
+        ],
         "HealthCheckUrl": "string",
         "HealthCheckInterval": 30,
         "InstanceIndex": 0
       },
       "Status": 5,
-      "ProcessId": 15912,
+      "ProcessId": 9008,
       "Ports": [
         {
           "Name": "port-0",
@@ -52,33 +63,53 @@
           "Protocol": "TCP"
         }
       ],
-      "Metrics": null,
-      "CreatedAt": "2026-01-24T19:44:47.1589196Z",
-      "StartedAt": "2026-01-24T19:45:17.1830062Z",
-      "StoppedAt": "2026-01-24T19:49:07.4182082Z",
+      "Metrics": {
+        "CpuPercent": 0,
+        "MemoryMB": 23.81640625,
+        "ThreadCount": 6,
+        "HandleCount": 176,
+        "IoReadBytes": 9008,
+        "IoWriteBytes": 9008,
+        "CollectedAt": "2026-01-25T19:36:15.7338917Z"
+      },
+      "CreatedAt": "2026-01-25T19:35:22.4300167Z",
+      "StartedAt": "2026-01-25T19:35:52.5332159Z",
+      "StoppedAt": "2026-01-25T19:36:46.5567263Z",
       "StopReported": false,
-      "LastHealthCheck": "2026-01-24T19:45:17.1830071Z",
+      "LastHealthCheck": "2026-01-25T19:36:15.7338961Z",
       "RestartCount": 0,
       "LastRestartAttempt": null,
-      "LastError": "Health check failed"
+      "LastError": "Instance is unhealthy",
+      "ReattachedAt": null
     },
     {
-      "InstanceId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8-local-agent-01-9e487c6767734340a70c2e225f54eeb6",
+      "InstanceId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8-local-agent-01-280b7c180076406b9a911f5cdd5bc037",
       "ApplicationId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8",
       "Command": {
         "ApplicationId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8",
-        "InstanceId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8-local-agent-01-9e487c6767734340a70c2e225f54eeb6",
+        "InstanceId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8-local-agent-01-280b7c180076406b9a911f5cdd5bc037",
         "ExecutablePath": "D:\\Project\\watchdog\\TestConsole\\TestConsole\\bin\\Release\\net9.0\\TestConsole.exe",
         "Arguments": "string",
         "WorkingDirectory": "D:\\Project\\watchdog\\TestConsole\\TestConsole\\bin\\Release\\net9.0",
-        "EnvironmentVariables": {},
-        "Ports": [],
+        "EnvironmentVariables": {
+          "additionalProp1": "string",
+          "additionalProp2": "string",
+          "additionalProp3": "string"
+        },
+        "Ports": [
+          {
+            "Name": "port-0",
+            "InternalPort": 30000,
+            "ExternalPort": 30000,
+            "Protocol": "TCP"
+          }
+        ],
         "HealthCheckUrl": "string",
         "HealthCheckInterval": 30,
         "InstanceIndex": 0
       },
       "Status": 5,
-      "ProcessId": 5648,
+      "ProcessId": 16660,
       "Ports": [
         {
           "Name": "port-0",
@@ -87,33 +118,53 @@
           "Protocol": "TCP"
         }
       ],
-      "Metrics": null,
-      "CreatedAt": "2026-01-24T19:43:46.9645359Z",
-      "StartedAt": "2026-01-24T19:44:17.0421739Z",
-      "StoppedAt": "2026-01-24T19:49:40.5968313Z",
+      "Metrics": {
+        "CpuPercent": 0,
+        "MemoryMB": 22.8515625,
+        "ThreadCount": 6,
+        "HandleCount": 176,
+        "IoReadBytes": 16660,
+        "IoWriteBytes": 16660,
+        "CollectedAt": "2026-01-25T19:39:35.7307188Z"
+      },
+      "CreatedAt": "2026-01-25T19:38:53.0945247Z",
+      "StartedAt": "2026-01-25T19:39:23.1576187Z",
+      "StoppedAt": "2026-01-25T19:39:46.5539694Z",
       "StopReported": false,
-      "LastHealthCheck": "2026-01-24T19:44:17.0421765Z",
+      "LastHealthCheck": "2026-01-25T19:39:35.7307238Z",
       "RestartCount": 0,
       "LastRestartAttempt": null,
-      "LastError": "Health check failed"
+      "LastError": "Instance is unhealthy",
+      "ReattachedAt": null
     },
     {
-      "InstanceId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8-local-agent-01-1849fb211fb54b87914133aea44a0cbd",
+      "InstanceId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8-local-agent-01-dae375932ef4463aaa9a9d1242645532",
       "ApplicationId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8",
       "Command": {
         "ApplicationId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8",
-        "InstanceId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8-local-agent-01-1849fb211fb54b87914133aea44a0cbd",
+        "InstanceId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8-local-agent-01-dae375932ef4463aaa9a9d1242645532",
         "ExecutablePath": "D:\\Project\\watchdog\\TestConsole\\TestConsole\\bin\\Release\\net9.0\\TestConsole.exe",
         "Arguments": "string",
         "WorkingDirectory": "D:\\Project\\watchdog\\TestConsole\\TestConsole\\bin\\Release\\net9.0",
-        "EnvironmentVariables": {},
-        "Ports": [],
+        "EnvironmentVariables": {
+          "additionalProp1": "string",
+          "additionalProp2": "string",
+          "additionalProp3": "string"
+        },
+        "Ports": [
+          {
+            "Name": "port-0",
+            "InternalPort": 30000,
+            "ExternalPort": 30000,
+            "Protocol": "TCP"
+          }
+        ],
         "HealthCheckUrl": "string",
         "HealthCheckInterval": 30,
         "InstanceIndex": 0
       },
-      "Status": 5,
-      "ProcessId": 9028,
+      "Status": 3,
+      "ProcessId": 17800,
       "Ports": [
         {
           "Name": "port-0",
@@ -122,33 +173,53 @@
           "Protocol": "TCP"
         }
       ],
-      "Metrics": null,
-      "CreatedAt": "2026-01-24T19:42:16.7520191Z",
-      "StartedAt": "2026-01-24T19:42:46.8768849Z",
-      "StoppedAt": "2026-01-24T19:50:13.794565Z",
+      "Metrics": {
+        "CpuPercent": 0,
+        "MemoryMB": 22.109375,
+        "ThreadCount": 7,
+        "HandleCount": 181,
+        "IoReadBytes": 17800,
+        "IoWriteBytes": 17800,
+        "CollectedAt": "2026-01-25T19:40:05.7345376Z"
+      },
+      "CreatedAt": "2026-01-25T19:39:23.1942691Z",
+      "StartedAt": "2026-01-25T19:39:53.2520011Z",
+      "StoppedAt": null,
       "StopReported": false,
-      "LastHealthCheck": "2026-01-24T19:42:46.876886Z",
+      "LastHealthCheck": "2026-01-25T19:40:05.7345417Z",
       "RestartCount": 0,
       "LastRestartAttempt": null,
-      "LastError": "Health check failed"
+      "LastError": null,
+      "ReattachedAt": null
     },
     {
-      "InstanceId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8-local-agent-01-bd2a40826fb1488093d78d03d2aed084",
+      "InstanceId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8-local-agent-01-58546e0528bb44c8bfce11419b4798f0",
       "ApplicationId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8",
       "Command": {
         "ApplicationId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8",
-        "InstanceId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8-local-agent-01-bd2a40826fb1488093d78d03d2aed084",
+        "InstanceId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8-local-agent-01-58546e0528bb44c8bfce11419b4798f0",
         "ExecutablePath": "D:\\Project\\watchdog\\TestConsole\\TestConsole\\bin\\Release\\net9.0\\TestConsole.exe",
         "Arguments": "string",
         "WorkingDirectory": "D:\\Project\\watchdog\\TestConsole\\TestConsole\\bin\\Release\\net9.0",
-        "EnvironmentVariables": {},
-        "Ports": [],
+        "EnvironmentVariables": {
+          "additionalProp1": "string",
+          "additionalProp2": "string",
+          "additionalProp3": "string"
+        },
+        "Ports": [
+          {
+            "Name": "port-0",
+            "InternalPort": 30000,
+            "ExternalPort": 30000,
+            "Protocol": "TCP"
+          }
+        ],
         "HealthCheckUrl": "string",
         "HealthCheckInterval": 30,
         "InstanceIndex": 0
       },
       "Status": 5,
-      "ProcessId": 10216,
+      "ProcessId": 17224,
       "Ports": [
         {
           "Name": "port-0",
@@ -157,22 +228,141 @@
           "Protocol": "TCP"
         }
       ],
-      "Metrics": null,
-      "CreatedAt": "2026-01-24T19:42:46.8791886Z",
-      "StartedAt": "2026-01-24T19:43:16.9173071Z",
-      "StoppedAt": "2026-01-24T19:50:47.0645436Z",
+      "Metrics": {
+        "CpuPercent": 0,
+        "MemoryMB": 23.8125,
+        "ThreadCount": 6,
+        "HandleCount": 176,
+        "IoReadBytes": 17224,
+        "IoWriteBytes": 17224,
+        "CollectedAt": "2026-01-25T19:36:45.7289035Z"
+      },
+      "CreatedAt": "2026-01-25T19:35:52.5461321Z",
+      "StartedAt": "2026-01-25T19:36:22.6341002Z",
+      "StoppedAt": "2026-01-25T19:36:47.6100021Z",
       "StopReported": false,
-      "LastHealthCheck": "2026-01-24T19:43:16.9173106Z",
+      "LastHealthCheck": "2026-01-25T19:36:45.7289078Z",
       "RestartCount": 0,
       "LastRestartAttempt": null,
-      "LastError": "Health check failed"
+      "LastError": "Health check failed",
+      "ReattachedAt": null
     },
     {
-      "InstanceId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8-local-agent-01-453a396822124478848326cab7db46b8",
+      "InstanceId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8-local-agent-01-ecfffa6af1e34607a45d8675009318f6",
       "ApplicationId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8",
       "Command": {
         "ApplicationId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8",
-        "InstanceId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8-local-agent-01-453a396822124478848326cab7db46b8",
+        "InstanceId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8-local-agent-01-ecfffa6af1e34607a45d8675009318f6",
+        "ExecutablePath": "D:\\Project\\watchdog\\TestConsole\\TestConsole\\bin\\Release\\net9.0\\TestConsole.exe",
+        "Arguments": "string",
+        "WorkingDirectory": "D:\\Project\\watchdog\\TestConsole\\TestConsole\\bin\\Release\\net9.0",
+        "EnvironmentVariables": {
+          "additionalProp1": "string",
+          "additionalProp2": "string",
+          "additionalProp3": "string"
+        },
+        "Ports": [
+          {
+            "Name": "port-0",
+            "InternalPort": 30000,
+            "ExternalPort": 30000,
+            "Protocol": "TCP"
+          }
+        ],
+        "HealthCheckUrl": "string",
+        "HealthCheckInterval": 30,
+        "InstanceIndex": 0
+      },
+      "Status": 5,
+      "ProcessId": 17448,
+      "Ports": [
+        {
+          "Name": "port-0",
+          "InternalPort": 30000,
+          "ExternalPort": 30000,
+          "Protocol": "TCP"
+        }
+      ],
+      "Metrics": {
+        "CpuPercent": 0,
+        "MemoryMB": 22.80078125,
+        "ThreadCount": 7,
+        "HandleCount": 181,
+        "IoReadBytes": 17448,
+        "IoWriteBytes": 17448,
+        "CollectedAt": "2026-01-25T19:35:35.737723Z"
+      },
+      "CreatedAt": "2026-01-25T19:34:52.3303528Z",
+      "StartedAt": "2026-01-25T19:35:22.4063084Z",
+      "StoppedAt": "2026-01-25T19:35:46.6305256Z",
+      "StopReported": false,
+      "LastHealthCheck": "2026-01-25T19:35:35.7377276Z",
+      "RestartCount": 0,
+      "LastRestartAttempt": null,
+      "LastError": "Instance is unhealthy",
+      "ReattachedAt": null
+    },
+    {
+      "InstanceId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8-local-agent-01-7b0719bd6bff4e98b7628073aec38064",
+      "ApplicationId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8",
+      "Command": {
+        "ApplicationId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8",
+        "InstanceId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8-local-agent-01-7b0719bd6bff4e98b7628073aec38064",
+        "ExecutablePath": "D:\\Project\\watchdog\\TestConsole\\TestConsole\\bin\\Release\\net9.0\\TestConsole.exe",
+        "Arguments": "string",
+        "WorkingDirectory": "D:\\Project\\watchdog\\TestConsole\\TestConsole\\bin\\Release\\net9.0",
+        "EnvironmentVariables": {
+          "additionalProp1": "string",
+          "additionalProp2": "string",
+          "additionalProp3": "string"
+        },
+        "Ports": [
+          {
+            "Name": "port-0",
+            "InternalPort": 30000,
+            "ExternalPort": 30000,
+            "Protocol": "TCP"
+          }
+        ],
+        "HealthCheckUrl": "string",
+        "HealthCheckInterval": 30,
+        "InstanceIndex": 0
+      },
+      "Status": 5,
+      "ProcessId": 1796,
+      "Ports": [
+        {
+          "Name": "port-0",
+          "InternalPort": 30000,
+          "ExternalPort": 30000,
+          "Protocol": "TCP"
+        }
+      ],
+      "Metrics": {
+        "CpuPercent": 0,
+        "MemoryMB": 23.3125,
+        "ThreadCount": 6,
+        "HandleCount": 176,
+        "IoReadBytes": 1796,
+        "IoWriteBytes": 1796,
+        "CollectedAt": "2026-01-25T19:38:15.8831055Z"
+      },
+      "CreatedAt": "2026-01-25T19:37:22.8627084Z",
+      "StartedAt": "2026-01-25T19:37:52.9429743Z",
+      "StoppedAt": "2026-01-25T19:38:46.5589878Z",
+      "StopReported": false,
+      "LastHealthCheck": "2026-01-25T19:38:15.8831101Z",
+      "RestartCount": 0,
+      "LastRestartAttempt": null,
+      "LastError": "Instance is unhealthy",
+      "ReattachedAt": null
+    },
+    {
+      "InstanceId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8-local-agent-01-3f82a2b8329a4f979fb46ccff85d9d85",
+      "ApplicationId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8",
+      "Command": {
+        "ApplicationId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8",
+        "InstanceId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8-local-agent-01-3f82a2b8329a4f979fb46ccff85d9d85",
         "ExecutablePath": "D:\\Project\\watchdog\\TestConsole\\TestConsole\\bin\\Release\\net9.0\\TestConsole.exe",
         "Arguments": "string",
         "WorkingDirectory": "D:\\Project\\watchdog\\TestConsole\\TestConsole\\bin\\Release\\net9.0",
@@ -182,8 +372,8 @@
         "HealthCheckInterval": 30,
         "InstanceIndex": 0
       },
-      "Status": 5,
-      "ProcessId": 9212,
+      "Status": 6,
+      "ProcessId": 8908,
       "Ports": [
         {
           "Name": "port-0",
@@ -192,16 +382,168 @@
           "Protocol": "TCP"
         }
       ],
-      "Metrics": null,
-      "CreatedAt": "2026-01-24T19:44:17.0488226Z",
-      "StartedAt": "2026-01-24T19:44:47.1550878Z",
-      "StoppedAt": "2026-01-24T19:51:20.158706Z",
+      "Metrics": {
+        "CpuPercent": 0,
+        "MemoryMB": 22.953125,
+        "ThreadCount": 5,
+        "HandleCount": 176,
+        "IoReadBytes": 8908,
+        "IoWriteBytes": 8908,
+        "CollectedAt": "2026-01-25T19:34:55.7445053Z"
+      },
+      "CreatedAt": "2026-01-25T19:30:27.1229714Z",
+      "StartedAt": "2026-01-25T19:30:57.1423714Z",
+      "StoppedAt": "2026-01-25T19:34:56.1129199Z",
       "StopReported": false,
-      "LastHealthCheck": "2026-01-24T19:44:47.1550889Z",
+      "LastHealthCheck": "2026-01-25T19:34:55.7445155Z",
       "RestartCount": 0,
       "LastRestartAttempt": null,
-      "LastError": "Health check failed"
+      "LastError": "Instance is in error state",
+      "ReattachedAt": "2026-01-25T19:34:45.271139Z"
+    },
+    {
+      "InstanceId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8-local-agent-01-5eb09cdaa224462da2f84f2cd04d0fc3",
+      "ApplicationId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8",
+      "Command": {
+        "ApplicationId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8",
+        "InstanceId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8-local-agent-01-5eb09cdaa224462da2f84f2cd04d0fc3",
+        "ExecutablePath": "D:\\Project\\watchdog\\TestConsole\\TestConsole\\bin\\Release\\net9.0\\TestConsole.exe",
+        "Arguments": "string",
+        "WorkingDirectory": "D:\\Project\\watchdog\\TestConsole\\TestConsole\\bin\\Release\\net9.0",
+        "EnvironmentVariables": {},
+        "Ports": [],
+        "HealthCheckUrl": "string",
+        "HealthCheckInterval": 30,
+        "InstanceIndex": 0
+      },
+      "Status": 6,
+      "ProcessId": 6624,
+      "Ports": [
+        {
+          "Name": "port-0",
+          "InternalPort": 30000,
+          "ExternalPort": 30000,
+          "Protocol": "TCP"
+        }
+      ],
+      "Metrics": {
+        "CpuPercent": 0,
+        "MemoryMB": 20.8046875,
+        "ThreadCount": 5,
+        "HandleCount": 176,
+        "IoReadBytes": 6624,
+        "IoWriteBytes": 6624,
+        "CollectedAt": "2026-01-25T19:34:46.0180803Z"
+      },
+      "CreatedAt": "2026-01-25T19:31:30.3298503Z",
+      "StartedAt": "2026-01-25T19:32:00.3978158Z",
+      "StoppedAt": "2026-01-25T19:34:52.0993045Z",
+      "StopReported": false,
+      "LastHealthCheck": "2026-01-25T19:34:46.018086Z",
+      "RestartCount": 0,
+      "LastRestartAttempt": null,
+      "LastError": "Instance is in error state",
+      "ReattachedAt": "2026-01-25T19:34:45.4196625Z"
+    },
+    {
+      "InstanceId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8-local-agent-01-20e796b0b3484badacbf4cec051debc5",
+      "ApplicationId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8",
+      "Command": {
+        "ApplicationId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8",
+        "InstanceId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8-local-agent-01-20e796b0b3484badacbf4cec051debc5",
+        "ExecutablePath": "D:\\Project\\watchdog\\TestConsole\\TestConsole\\bin\\Release\\net9.0\\TestConsole.exe",
+        "Arguments": "string",
+        "WorkingDirectory": "D:\\Project\\watchdog\\TestConsole\\TestConsole\\bin\\Release\\net9.0",
+        "EnvironmentVariables": {},
+        "Ports": [],
+        "HealthCheckUrl": "string",
+        "HealthCheckInterval": 30,
+        "InstanceIndex": 0
+      },
+      "Status": 6,
+      "ProcessId": 17436,
+      "Ports": [
+        {
+          "Name": "port-0",
+          "InternalPort": 30000,
+          "ExternalPort": 30000,
+          "Protocol": "TCP"
+        }
+      ],
+      "Metrics": {
+        "CpuPercent": 0,
+        "MemoryMB": 23.1328125,
+        "ThreadCount": 5,
+        "HandleCount": 176,
+        "IoReadBytes": 17436,
+        "IoWriteBytes": 17436,
+        "CollectedAt": "2026-01-25T19:34:46.2901489Z"
+      },
+      "CreatedAt": "2026-01-25T19:29:57.011627Z",
+      "StartedAt": "2026-01-25T19:30:27.1035658Z",
+      "StoppedAt": "2026-01-25T19:34:50.1120482Z",
+      "StopReported": false,
+      "LastHealthCheck": "2026-01-25T19:34:46.2901639Z",
+      "RestartCount": 0,
+      "LastRestartAttempt": null,
+      "LastError": "Instance is in error state",
+      "ReattachedAt": "2026-01-25T19:34:45.4230653Z"
+    },
+    {
+      "InstanceId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8-local-agent-01-3744806eada94c4f933e2a44394a76f7",
+      "ApplicationId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8",
+      "Command": {
+        "ApplicationId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8",
+        "InstanceId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8-local-agent-01-3744806eada94c4f933e2a44394a76f7",
+        "ExecutablePath": "D:\\Project\\watchdog\\TestConsole\\TestConsole\\bin\\Release\\net9.0\\TestConsole.exe",
+        "Arguments": "string",
+        "WorkingDirectory": "D:\\Project\\watchdog\\TestConsole\\TestConsole\\bin\\Release\\net9.0",
+        "EnvironmentVariables": {
+          "additionalProp1": "string",
+          "additionalProp2": "string",
+          "additionalProp3": "string"
+        },
+        "Ports": [
+          {
+            "Name": "port-0",
+            "InternalPort": 30000,
+            "ExternalPort": 30000,
+            "Protocol": "TCP"
+          }
+        ],
+        "HealthCheckUrl": "string",
+        "HealthCheckInterval": 30,
+        "InstanceIndex": 0
+      },
+      "Status": 5,
+      "ProcessId": 13508,
+      "Ports": [
+        {
+          "Name": "port-0",
+          "InternalPort": 30000,
+          "ExternalPort": 30000,
+          "Protocol": "TCP"
+        }
+      ],
+      "Metrics": {
+        "CpuPercent": 0,
+        "MemoryMB": 23.3125,
+        "ThreadCount": 6,
+        "HandleCount": 176,
+        "IoReadBytes": 13508,
+        "IoWriteBytes": 13508,
+        "CollectedAt": "2026-01-25T19:37:35.7444508Z"
+      },
+      "CreatedAt": "2026-01-25T19:36:52.6884707Z",
+      "StartedAt": "2026-01-25T19:37:22.8123731Z",
+      "StoppedAt": "2026-01-25T19:37:46.5595747Z",
+      "StopReported": false,
+      "LastHealthCheck": "2026-01-25T19:37:35.7444593Z",
+      "RestartCount": 0,
+      "LastRestartAttempt": null,
+      "LastError": "Health check failed",
+      "ReattachedAt": null
     }
   ],
-  "SavedAt": "2026-01-24T19:51:20.1587653Z"
+  "SavedAt": "2026-01-25T19:40:15.4934199Z"
 }

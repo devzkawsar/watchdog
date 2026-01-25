@@ -35,6 +35,7 @@ public class GrpcClient : IGrpcClientInternal
     private bool _isConnected = false;
     private int _reconnectAttempts = 0;
     private int _reconnectScheduled = 0;
+    private readonly SemaphoreSlim _writeLock = new(1, 1);
 
     private void CleanupStream()
     {
@@ -60,6 +61,45 @@ public class GrpcClient : IGrpcClientInternal
         _streamReceiveTask = null;
         _streamSendTask = null;
         _streamCts = null;
+    }
+
+    private async Task<bool> WriteToStreamAsync(AgentMessage message, CancellationToken cancellationToken)
+    {
+        if (_stream == null)
+        {
+            return false;
+        }
+
+        await _writeLock.WaitAsync(cancellationToken);
+        try
+        {
+            if (_stream == null)
+            {
+                return false;
+            }
+
+            await _stream.RequestStream.WriteAsync(message, cancellationToken);
+            return true;
+        }
+        catch (RpcException rpcEx)
+        {
+            TriggerReconnect($"write failed ({rpcEx.StatusCode})", rpcEx);
+            return false;
+        }
+        catch (InvalidOperationException invEx)
+        {
+            TriggerReconnect("write invalid operation", invEx);
+            return false;
+        }
+        catch (Exception ex)
+        {
+            TriggerReconnect("write exception", ex);
+            return false;
+        }
+        finally
+        {
+            _writeLock.Release();
+        }
     }
 
     private void TriggerReconnect(string reason, Exception? exception = null)
@@ -283,8 +323,7 @@ public class GrpcClient : IGrpcClientInternal
 
             if (_stream != null)
             {
-                await _stream.RequestStream.WriteAsync(message, cancellationToken);
-                return true;
+                return await WriteToStreamAsync(message, cancellationToken);
             }
             else
             {
@@ -292,22 +331,9 @@ public class GrpcClient : IGrpcClientInternal
                 return false;
             }
         }
-        catch (RpcException rpcEx)
-        {
-            // When the server ends the stream, gRPC can throw during write.
-            // In some cases this surfaces as StatusCode=OK (stream completed).
-            TriggerReconnect($"heartbeat write failed ({rpcEx.StatusCode})", rpcEx);
-            return false;
-        }
-        catch (InvalidOperationException invEx)
-        {
-            // Typically thrown if writing after CompleteAsync / stream already ended
-            TriggerReconnect("heartbeat write invalid operation", invEx);
-            return false;
-        }
         catch (Exception ex)
         {
-            TriggerReconnect("heartbeat write exception", ex);
+            _logger.LogError(ex, "Heartbeat failed");
             return false;
         }
     }
@@ -323,13 +349,16 @@ public class GrpcClient : IGrpcClientInternal
 
             if (_stream != null)
             {
-                await _stream.RequestStream.WriteAsync(message, cancellationToken);
+                var success = await WriteToStreamAsync(message, cancellationToken);
 
-                _logger.LogInformation(
-                    "Reported application spawned: {InstanceId} (PID: {ProcessId})",
-                    spawned.InstanceId, spawned.ProcessId);
+                if (success)
+                {
+                    _logger.LogInformation(
+                        "Reported application spawned: {InstanceId} (PID: {ProcessId})",
+                        spawned.InstanceId, spawned.ProcessId);
+                }
 
-                return true;
+                return success;
             }
             else
             {
@@ -355,13 +384,16 @@ public class GrpcClient : IGrpcClientInternal
 
             if (_stream != null)
             {
-                await _stream.RequestStream.WriteAsync(message, cancellationToken);
+                var success = await WriteToStreamAsync(message, cancellationToken);
 
-                _logger.LogInformation(
-                    "Reported application stopped: {InstanceId} (Exit code: {ExitCode})",
-                    stopped.InstanceId, stopped.ExitCode);
+                if (success)
+                {
+                    _logger.LogInformation(
+                        "Reported application stopped: {InstanceId} (Exit code: {ExitCode})",
+                        stopped.InstanceId, stopped.ExitCode);
+                }
 
-                return true;
+                return success;
             }
             else
             {
@@ -387,13 +419,16 @@ public class GrpcClient : IGrpcClientInternal
 
             if (_stream != null)
             {
-                await _stream.RequestStream.WriteAsync(message, cancellationToken);
+                var success = await WriteToStreamAsync(message, cancellationToken);
 
-                _logger.LogError(
-                    "Reported error to control plane: {ErrorType} - {ErrorMessage}",
-                    error.ErrorType, error.ErrorMessage);
+                if (success)
+                {
+                    _logger.LogInformation(
+                        "Reported error to control plane: {ErrorType} - {ErrorMessage}",
+                        error.ErrorType, error.ErrorMessage);
+                }
 
-                return true;
+                return success;
             }
             else
             {

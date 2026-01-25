@@ -189,7 +189,8 @@ namespace Watchdog.Agent.Services
             string instanceId, 
             ApplicationStatus status,
             int? processId = null,
-            List<PortMapping>? ports = null)
+            List<PortMapping>? ports = null,
+            DateTime? reattachedAt = null)
         {
             if (_instances.TryGetValue(instanceId, out var instance))
             {
@@ -205,13 +206,18 @@ namespace Watchdog.Agent.Services
                     
                     if (status == ApplicationStatus.Running)
                     {
-                        instance.StartedAt = DateTime.UtcNow;
+                        if (!instance.StartedAt.HasValue)
+                            instance.StartedAt = DateTime.UtcNow;
+                            
                         instance.LastHealthCheck = DateTime.UtcNow;
                         instance.RestartCount = 0;
                         instance.LastRestartAttempt = null;
                         instance.StopReported = false;
                     }
-                    else if (status == ApplicationStatus.Stopped || status == ApplicationStatus.Error)
+                    if (reattachedAt.HasValue)
+                        instance.ReattachedAt = reattachedAt.Value;
+                    
+                    if (status == ApplicationStatus.Stopped || status == ApplicationStatus.Error)
                     {
                         instance.StoppedAt = DateTime.UtcNow;
                     }
@@ -251,7 +257,7 @@ namespace Watchdog.Agent.Services
                     {
                         InstanceId = instance.InstanceId,
                         ApplicationId = instance.ApplicationId,
-                        Status = instance.Status.ToString(),
+                        Status = MapStatusToApi(instance.Status),
                         ProcessId = instance.ProcessId?.ToString() ?? string.Empty,
                         StartTime = instance.StartedAt.HasValue
                             ? new DateTimeOffset(instance.StartedAt.Value).ToUnixTimeSeconds()
@@ -463,6 +469,21 @@ namespace Watchdog.Agent.Services
             }
         }
         
+        private string MapStatusToApi(ApplicationStatus status)
+        {
+            return status switch
+            {
+                ApplicationStatus.Running => "Running",
+                ApplicationStatus.Unhealthy => "Running", // API doesn't have Unhealthy status yet
+                ApplicationStatus.Starting => "Running",
+                ApplicationStatus.Stopping => "Running",
+                ApplicationStatus.Stopped => "Stopped",
+                ApplicationStatus.Error => "Error",
+                ApplicationStatus.Pending => "Running", // Map Pending to Running for DB safety
+                _ => "Running"
+            };
+        }
+
         private Task<SystemMetrics> GetSystemMetrics()
         {
             // This would be implemented by a separate metrics collector
@@ -560,26 +581,18 @@ namespace Watchdog.Agent.Services
             // 2. Add or Update instances from API
             foreach (var apiInstance in activeInstances)
             {
-                // We only care about instances the API thinks are Running
-                if (apiInstance.Status != "Running") continue;
+                // Sync any instance that has a PID, regardless of Status, 
+                // OR any instance the API thinks is Running.
+                bool hasPid = int.TryParse(apiInstance.ProcessId, out int pid) && pid > 0;
+                if (!hasPid && apiInstance.Status != "Running") 
+                    continue;
                 
                 // Check if we already know about this instance
                 if (_instances.TryGetValue(apiInstance.InstanceId, out var localInstance))
                 {
-                    // Ensure local status reflects API's expectation 
-                    // so we give ReattachProcesses a chance to find it.
-                    if (localInstance.Status != Enums.ApplicationStatus.Running)
+                    // Update PID if provided
+                    if (hasPid)
                     {
-                        _logger.LogInformation("Updating local status for instance {InstanceId} from {OldStatus} to Running to match Control Plane", 
-                            apiInstance.InstanceId, localInstance.Status);
-                        localInstance.Status = Enums.ApplicationStatus.Running;
-                    }
-
-                    // Sync the PID from API if we don't have one (or it's different)
-                    if (int.TryParse(apiInstance.ProcessId, out int pid) && pid > 0)
-                    {
-                        // Preference: If we already have a PID locally and it's running, keep it?
-                        // For now, let the API's PID override if ours is missing or different.
                         if (!localInstance.ProcessId.HasValue || localInstance.ProcessId != pid)
                         {
                             localInstance.ProcessId = pid;
@@ -605,7 +618,7 @@ namespace Watchdog.Agent.Services
                         InstanceId = apiInstance.InstanceId,
                         ApplicationId = apiInstance.ApplicationId,
                         Status = Enums.ApplicationStatus.Running,
-                        ProcessId = int.TryParse(apiInstance.ProcessId, out int pid) ? pid : null,
+                        ProcessId = hasPid ? pid : null,
                         CreatedAt = DateTimeOffset.FromUnixTimeSeconds(apiInstance.StartTime).UtcDateTime,
                         StartedAt = DateTimeOffset.FromUnixTimeSeconds(apiInstance.StartTime).UtcDateTime,
                         Command = new SpawnCommand 
@@ -637,6 +650,9 @@ namespace Watchdog.Agent.Services
                     
                     _instances[managedApp.InstanceId] = managedApp;
                 }
+                
+                // Mark for grace period
+                _instances[apiInstance.InstanceId].ReattachedAt = DateTime.UtcNow;
             }
             
             // Save authoritative state
