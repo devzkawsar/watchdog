@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Text.Json;
 using Microsoft.Extensions.Options;
 using Watchdog.Agent.Configuration;
@@ -101,7 +102,18 @@ public class CommandExecutor : ICommandExecutorInternal
             existingInstance.Status == ApplicationStatus.Running &&
             existingInstance.ProcessId.HasValue)
         {
-            var isRunning = await _processManager.IsProcessRunning(command.InstanceId);
+            var pid = existingInstance.ProcessId.Value;
+            var isRunning = false;
+            try
+            {
+                var p = Process.GetProcessById(pid);
+                isRunning = !p.HasExited;
+            }
+            catch
+            {
+                isRunning = false;
+            }
+
             if (isRunning)
             {
                 _logger.LogInformation(
@@ -128,6 +140,22 @@ public class CommandExecutor : ICommandExecutorInternal
             foreach (var kvp in parameters.EnvironmentVariables)
             {
                 spawnCommand.EnvironmentVariables[kvp.Key] = kvp.Value;
+            }
+        }
+
+        if (OperatingSystem.IsWindows() && parameters.RunAsWindowsService)
+        {
+            spawnCommand.EnvironmentVariables["WATCHDOG_RUN_AS_WINDOWS_SERVICE"] = "true";
+
+            var serviceName = !string.IsNullOrWhiteSpace(parameters.WindowsServiceName)
+                ? parameters.WindowsServiceName
+                : BuildDefaultWindowsServiceName(command.InstanceId);
+
+            spawnCommand.EnvironmentVariables["WATCHDOG_WINDOWS_SERVICE_NAME"] = serviceName;
+
+            if (parameters.PersistWindowsService)
+            {
+                spawnCommand.EnvironmentVariables["WATCHDOG_WINDOWS_SERVICE_PERSIST"] = "true";
             }
         }
 
@@ -277,6 +305,9 @@ public class CommandExecutor : ICommandExecutorInternal
         public string? HealthCheckUrl { get; set; }
         public int HealthCheckInterval { get; set; } = 30;
         public int InstanceIndex { get; set; }
+        public bool RunAsWindowsService { get; set; }
+        public string? WindowsServiceName { get; set; }
+        public bool PersistWindowsService { get; set; }
     }
 
     private sealed class KillCommandParams
@@ -288,5 +319,20 @@ public class CommandExecutor : ICommandExecutorInternal
     private sealed class RestartCommandParams
     {
         public int TimeoutSeconds { get; set; } = 30;
+    }
+
+    private static string BuildDefaultWindowsServiceName(string instanceId)
+    {
+        var sanitized = new string(instanceId
+            .Select(c => char.IsLetterOrDigit(c) || c == '-' || c == '_' ? c : '-')
+            .ToArray());
+
+        sanitized = sanitized.Trim('-');
+
+        const int maxLen = 180;
+        if (sanitized.Length > maxLen)
+            sanitized = sanitized[..maxLen];
+
+        return $"Watchdog-{sanitized}";
     }
 }

@@ -61,6 +61,7 @@ builder.Services.AddGrpc(options =>
 builder.Services.AddHostedService<ScalingBackgroundService>();
 builder.Services.AddHostedService<CommandDispatcherBackgroundService>();
 builder.Services.AddHostedService<GrpcConnectionCleanupBackgroundService>();
+builder.Services.AddHostedService<HeartbeatMonitorBackgroundService>();
 
 builder.Services.AddHttpClient();
 

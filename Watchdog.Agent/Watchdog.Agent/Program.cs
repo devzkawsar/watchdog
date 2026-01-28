@@ -18,12 +18,19 @@ public class Program
         CreateHostBuilder(args).Build().Run();
     }
 
-    public static IHostBuilder CreateHostBuilder(string[] args) =>
-        Host.CreateDefaultBuilder(args)
-            .UseWindowsService(config =>
+    public static IHostBuilder CreateHostBuilder(string[] args)
+    {
+        var builder = Host.CreateDefaultBuilder(args);
+
+        if (OperatingSystem.IsWindows())
+        {
+            builder = builder.UseWindowsService(config =>
             {
                 config.ServiceName = "WatchdogAgent";
-            })
+            });
+        }
+
+        return builder
             .ConfigureAppConfiguration((context, config) =>
             {
                 // Add configuration sources
@@ -45,12 +52,9 @@ public class Program
                 // Services
                 services.AddSingleton<IApplicationManager, ApplicationManager>();
                 services.AddSingleton<IProcessManager, ProcessManager>();
-                services.AddSingleton<IMonitorService, MonitorService>();
                 services.AddSingleton<IGrpcClient, GrpcClient>();
                 services.AddSingleton<INetworkManager, NetworkManager>();
-                services.AddSingleton<IHealthChecker, HealthChecker>();
                 services.AddSingleton<ICommandExecutor, CommandExecutor>();
-                services.AddSingleton<IMetricsCollector, MetricsCollector>();
                 services.AddSingleton<IConfigurationManager, ConfigurationManager>();
                 
                 // Hosted service
@@ -112,6 +116,7 @@ public class Program
                     fileSizeLimitBytes: 10 * 1024 * 1024, // 10MB
                     retainedFileCountLimit: 5);
             });
+    }
 
     [SupportedOSPlatform("windows")]
     private static void AddWindowsEventLog(ILoggingBuilder logging)

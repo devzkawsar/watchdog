@@ -48,6 +48,7 @@ public class ApplicationManager : IApplicationManager
             ApplicationType = request.ApplicationType,
             HealthCheckUrl = request.HealthCheckUrl ?? string.Empty,
             HealthCheckInterval = request.HealthCheckInterval,
+            HeartbeatTimeout = request.HeartbeatTimeout,
             DesiredInstances = request.DesiredInstances,
             MinInstances = request.MinInstances,
             MaxInstances = request.MaxInstances,
@@ -86,6 +87,7 @@ public class ApplicationManager : IApplicationManager
         existing.ApplicationType = request.ApplicationType;
         existing.HealthCheckUrl = request.HealthCheckUrl ?? existing.HealthCheckUrl;
         existing.HealthCheckInterval = request.HealthCheckInterval;
+        existing.HeartbeatTimeout = request.HeartbeatTimeout;
         existing.DesiredInstances = request.DesiredInstances;
         existing.MinInstances = request.MinInstances;
         existing.MaxInstances = request.MaxInstances;
@@ -301,6 +303,9 @@ public class CreateApplicationRequest
     [Range(5, 300)]
     public int HealthCheckInterval { get; set; } = 30;
     
+    [Range(5, 3600)]
+    public int HeartbeatTimeout { get; set; } = 120;
+    
     [Range(0, 100)]
     public int DesiredInstances { get; set; } = 1;
     
@@ -338,6 +343,9 @@ public class UpdateApplicationRequest
     
     [Range(5, 300)]
     public int HealthCheckInterval { get; set; }
+    
+    [Range(5, 3600)]
+    public int HeartbeatTimeout { get; set; }
     
     [Range(0, 100)]
     public int DesiredInstances { get; set; }

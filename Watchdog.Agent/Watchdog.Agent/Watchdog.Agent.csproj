@@ -25,6 +25,11 @@
     </ItemGroup>
 
     <ItemGroup>
+      <Compile Remove="Services\MonitorService.cs" />
+      <Compile Remove="Interface\IMonitorService.cs" />
+    </ItemGroup>
+
+    <ItemGroup>
       <Folder Include="data\storage\" />
     </ItemGroup>
 </Project>

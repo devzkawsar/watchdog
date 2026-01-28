@@ -129,7 +129,6 @@ namespace Watchdog.Agent.Services
         {
             try
             {
-                var instanceStatuses = await GetInstanceStatuses();
                 var systemMetrics = await GetSystemMetrics();
                 
                 var statusRequest = new StatusReportRequest
@@ -138,9 +137,7 @@ namespace Watchdog.Agent.Services
                     Timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
                     SystemMetrics = systemMetrics
                 };
-                
-                statusRequest.ApplicationStatuses.AddRange(instanceStatuses);
-                
+
                 var grpcClient = _serviceProvider.GetRequiredService<IGrpcClient>();
                 await grpcClient.ReportStatus(statusRequest);
             }
@@ -161,6 +158,27 @@ namespace Watchdog.Agent.Services
                 CreatedAt = DateTime.UtcNow,
                 RestartCount = 0
             };
+
+            if (OperatingSystem.IsWindows())
+            {
+                if (command.EnvironmentVariables.TryGetValue("WATCHDOG_RUN_AS_WINDOWS_SERVICE", out var runAsService) &&
+                    string.Equals(runAsService, "true", StringComparison.OrdinalIgnoreCase))
+                {
+                    instance.IsWindowsService = true;
+
+                    if (command.EnvironmentVariables.TryGetValue("WATCHDOG_WINDOWS_SERVICE_NAME", out var serviceName) &&
+                        !string.IsNullOrWhiteSpace(serviceName))
+                    {
+                        instance.WindowsServiceName = serviceName;
+                    }
+
+                    if (command.EnvironmentVariables.TryGetValue("WATCHDOG_WINDOWS_SERVICE_PERSIST", out var persist) &&
+                        string.Equals(persist, "true", StringComparison.OrdinalIgnoreCase))
+                    {
+                        instance.PersistWindowsService = true;
+                    }
+                }
+            }
             
             _instances[command.InstanceId] = instance;
             

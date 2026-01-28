@@ -20,7 +20,7 @@ public class ApplicationRepository : IApplicationRepository
         const string sql = @"
             SELECT 
                 Id, Name, DisplayName, ExecutablePath, Arguments, WorkingDirectory,
-                ApplicationType, HealthCheckUrl, HealthCheckInterval,
+                ApplicationType, HealthCheckUrl, HealthCheckInterval, HeartbeatTimeout,
                 DesiredInstances, MinInstances, MaxInstances,
                 PortRequirements AS PortRequirementsJson, EnvironmentVariables AS EnvironmentVariablesJson, AutoStart,
                 CreatedAt, UpdatedAt
@@ -55,7 +55,7 @@ public class ApplicationRepository : IApplicationRepository
         const string sql = @"
             SELECT 
                 Id, Name, DisplayName, ExecutablePath, Arguments, WorkingDirectory,
-                ApplicationType, HealthCheckUrl, HealthCheckInterval,
+                ApplicationType, HealthCheckUrl, HealthCheckInterval, HeartbeatTimeout,
                 DesiredInstances, MinInstances, MaxInstances,
                 PortRequirements AS PortRequirementsJson, EnvironmentVariables AS EnvironmentVariablesJson, AutoStart,
                 CreatedAt, UpdatedAt
@@ -89,12 +89,12 @@ public class ApplicationRepository : IApplicationRepository
         const string sql = @"
             INSERT INTO Applications 
                 (Id, Name, DisplayName, ExecutablePath, Arguments, WorkingDirectory,
-                 ApplicationType, HealthCheckUrl, HealthCheckInterval,
+                 ApplicationType, HealthCheckUrl, HealthCheckInterval, HeartbeatTimeout,
                  DesiredInstances, MinInstances, MaxInstances,
                  PortRequirements, EnvironmentVariables, AutoStart)
             VALUES 
                 (@Id, @Name, @DisplayName, @ExecutablePath, @Arguments, @WorkingDirectory,
-                 @ApplicationType, @HealthCheckUrl, @HealthCheckInterval,
+                 @ApplicationType, @HealthCheckUrl, @HealthCheckInterval, @HeartbeatTimeout,
                  @DesiredInstances, @MinInstances, @MaxInstances,
                  @PortRequirementsJson, @EnvironmentVariablesJson, @AutoStart)";
         
@@ -119,6 +119,7 @@ public class ApplicationRepository : IApplicationRepository
                 ApplicationType = @ApplicationType,
                 HealthCheckUrl = @HealthCheckUrl,
                 HealthCheckInterval = @HealthCheckInterval,
+                HeartbeatTimeout = @HeartbeatTimeout,
                 DesiredInstances = @DesiredInstances,
                 MinInstances = @MinInstances,
                 MaxInstances = @MaxInstances,
@@ -177,6 +178,63 @@ public class ApplicationRepository : IApplicationRepository
         return await connection.QueryAsync<ApplicationInstance>(sql, new { AgentId = agentId });
     }
     
+    public async Task<IEnumerable<ApplicationInstance>> GetInstancesWithHeartbeatTimeout()
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        
+        const string sql = @"
+            SELECT 
+                InstanceId, ApplicationId, AgentId, ProcessId,
+                Status, CpuPercent, MemoryMB, MemoryPercent, ThreadCount, HandleCount,
+                AssignedPorts, LastHealthCheck, LastHeartbeat, StartedAt, StoppedAt, 
+                CreatedAt, UpdatedAt
+            FROM ApplicationInstances
+            WHERE Status IN ('Running', 'Starting')";
+        
+        return await connection.QueryAsync<ApplicationInstance>(sql);
+    }
+
+    public async Task<IEnumerable<ApplicationInstanceHeartbeatInfo>> GetStaleInstancesByHeartbeat()
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        
+        const string sql = @"
+            SELECT
+                ai.InstanceId,
+                ai.ApplicationId,
+                ai.AgentId,
+                ai.Status,
+                ai.LastHeartbeat,
+                a.HealthCheckInterval,
+                a.HeartbeatTimeout
+            FROM ApplicationInstances ai
+            INNER JOIN Applications a ON a.Id = ai.ApplicationId
+            WHERE ai.Status IN ('Running', 'Starting')
+              AND (
+                    ai.LastHeartbeat IS NULL
+                    OR ai.LastHeartbeat < DATEADD(SECOND, -a.HeartbeatTimeout, GETUTCDATE())
+                  )";
+        
+        return await connection.QueryAsync<ApplicationInstanceHeartbeatInfo>(sql);
+    }
+
+    public async Task<int> UpdateInstanceStatusWithoutHeartbeat(string instanceId, string status)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        
+        const string sql = @"
+            UPDATE ApplicationInstances
+            SET Status = @Status,
+                UpdatedAt = GETUTCDATE()
+            WHERE InstanceId = @InstanceId";
+        
+        return await connection.ExecuteAsync(sql, new
+        {
+            InstanceId = instanceId,
+            Status = status
+        });
+    }
+    
     public async Task<int> UpdateInstanceStatus(string instanceId, string status, 
         double? cpuPercent = null, double? memoryMB = null, int? processId = null)
     {
@@ -214,6 +272,7 @@ public class Application
     public int ApplicationType { get; set; } // 0=Console, 1=Service, 2=IIS
     public string HealthCheckUrl { get; set; } = string.Empty;
     public int HealthCheckInterval { get; set; } = 30;
+    public int HeartbeatTimeout { get; set; } = 120;
     public int DesiredInstances { get; set; } = 1;
     public int MinInstances { get; set; } = 1;
     public int MaxInstances { get; set; } = 5;
@@ -247,6 +306,17 @@ public class ApplicationInstance
     public DateTime? StoppedAt { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
+}
+
+public class ApplicationInstanceHeartbeatInfo
+{
+    public string InstanceId { get; set; } = string.Empty;
+    public string ApplicationId { get; set; } = string.Empty;
+    public string AgentId { get; set; } = string.Empty;
+    public string Status { get; set; } = string.Empty;
+    public DateTime? LastHeartbeat { get; set; }
+    public int HealthCheckInterval { get; set; }
+    public int HeartbeatTimeout { get; set; }
 }
 
 public class PortRequirement

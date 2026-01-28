@@ -11,7 +11,6 @@ public class AgentWorker : BackgroundService
 {
     private readonly IApplicationManager _applicationManager;
     private readonly IProcessManager _processManager;
-    private readonly IMonitorService _monitorService;
     private readonly IGrpcClient _grpcClient;
     private readonly ILogger<AgentWorker> _logger;
     private readonly IOptions<AgentSettings> _agentSettings;
@@ -25,7 +24,6 @@ public class AgentWorker : BackgroundService
     public AgentWorker(
         IApplicationManager applicationManager,
         IProcessManager processManager,
-        IMonitorService monitorService,
         IGrpcClient grpcClient,
         ILogger<AgentWorker> logger,
         IOptions<AgentSettings> agentSettings,
@@ -33,7 +31,6 @@ public class AgentWorker : BackgroundService
     {
         _applicationManager = applicationManager;
         _processManager = processManager;
-        _monitorService = monitorService;
         _grpcClient = grpcClient;
         _logger = logger;
         _agentSettings = agentSettings;
@@ -55,39 +52,9 @@ public class AgentWorker : BackgroundService
                 await RegisterWithControlPlane(stoppingToken);
             }
 
-            // Reattach to any existing processes for instances loaded from state (local or synced)
-            _logger.LogInformation("Attempting to reattach to existing running processes...");
-            var reattached = await _processManager.ReattachProcesses();
-            _logger.LogInformation("Process reattachment phase completed. Reattached to {Count} processes.", reattached.Count);
-
-            // Notify API about reattached processes
-            foreach (var managed in reattached)
-            {
-                try
-                {
-                    await _grpcClient.SendApplicationSpawned(new ApplicationSpawned
-                    {
-                        InstanceId = managed.InstanceId,
-                        ApplicationId = managed.ApplicationId,
-                        ProcessId = managed.ProcessId,
-                        Ports = { managed.Ports },
-                        StartTime = new DateTimeOffset(managed.StartTime).ToUnixTimeSeconds()
-                    }, stoppingToken);
-                    
-                    _logger.LogInformation("Notified API about reattached instance {InstanceId}", managed.InstanceId);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Failed to notify API about reattached instance {InstanceId}", managed.InstanceId);
-                }
-            }
-            
-            // Start monitoring service
-            await _monitorService.Start(stoppingToken);
-            
             // On startup, immediately detect failures so any assigned instances
             // without a running process are reported to the control plane as stopped.
-            await _monitorService.DetectFailures();
+            _logger.LogInformation("Skipping failure detection (spawned-app monitoring disabled)");
             
             // Start status reporting timer (every 5 seconds)
             _statusReportTimer = new Timer(
@@ -229,8 +196,7 @@ public class AgentWorker : BackgroundService
         
         _statusReportTimer?.Dispose();
         _reconnectTimer?.Dispose();
-        
-        await _monitorService.Stop();
+
         await _grpcClient.Disconnect();
         
         _logger.LogInformation("Agent worker cleanup completed");
