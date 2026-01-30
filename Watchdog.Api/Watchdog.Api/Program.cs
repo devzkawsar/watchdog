@@ -78,6 +78,7 @@ app.MapControllers();
 
 // Map gRPC service
 app.MapGrpcService<AgentGrpcServiceImpl>();
+app.MapGrpcService<ApplicationMonitoringGrpcServiceImpl>();
 
 // Health check endpoint
 app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = DateTime.UtcNow }));

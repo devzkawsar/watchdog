@@ -291,7 +291,7 @@ public class ApplicationInstance
 {
     public string InstanceId { get; set; } = string.Empty;
     public string ApplicationId { get; set; } = string.Empty;
-    public string AgentId { get; set; } = string.Empty;
+    public string? AgentId { get; set; }
     public int? ProcessId { get; set; }
     public string Status { get; set; } = "Pending"; // Pending, Running, Stopped, Error
     public double? CpuPercent { get; set; }

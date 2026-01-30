@@ -114,7 +114,7 @@ CREATE TABLE [Agents] (
 CREATE TABLE [ApplicationInstances] (
     [InstanceId] VARCHAR(100) NOT NULL PRIMARY KEY,
     [ApplicationId] VARCHAR(50) NOT NULL,
-    [AgentId] VARCHAR(50) NOT NULL,
+    [AgentId] VARCHAR(50) NULL,
 
     -- Process Information
     [ProcessId] INT,
@@ -141,6 +141,10 @@ CREATE TABLE [ApplicationInstances] (
     [StoppedAt] DATETIME2,
     [LastHeartbeat] DATETIME2,
     [LastHealthCheck] DATETIME2,
+
+    -- Lifecycle
+    [IsReady] BIT DEFAULT 0,
+    [ReadyAt] DATETIME2,
 
     -- Restart Tracking
     [RestartCount] INT DEFAULT 0,
