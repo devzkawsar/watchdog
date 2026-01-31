@@ -195,9 +195,11 @@ public class ApplicationMonitoringGrpcServiceImpl : ApplicationMonitoringService
                 IF EXISTS (SELECT 1 FROM ApplicationInstances WHERE InstanceId = @InstanceId)
                 BEGIN
                     UPDATE ApplicationInstances
-                    SET IsReady = 1,
+                    SET ApplicationId = @ApplicationId,
+                        IsReady = 1,
                         ReadyAt = @ReadyAt,
                         Status = 'Running',
+                        LastHeartbeat = GETUTCDATE(),
                         UpdatedAt = GETUTCDATE()
                     WHERE InstanceId = @InstanceId
                 END
@@ -268,7 +270,8 @@ public class ApplicationMonitoringGrpcServiceImpl : ApplicationMonitoringService
                 IF EXISTS (SELECT 1 FROM ApplicationInstances WHERE InstanceId = @InstanceId)
                 BEGIN
                     UPDATE ApplicationInstances
-                    SET LastHeartbeat = GETUTCDATE(),
+                    SET ApplicationId = @ApplicationId,
+                        LastHeartbeat = GETUTCDATE(),
                         Status = CASE WHEN IsReady = 1 THEN 'Running' ELSE 'Starting' END,
                         UpdatedAt = GETUTCDATE()
                     WHERE InstanceId = @InstanceId
