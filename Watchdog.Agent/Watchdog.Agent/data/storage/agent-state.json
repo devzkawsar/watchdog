@@ -1,999 +1,380 @@
 {
   "Applications": [
     {
-      "Id": "ecbd5a31-3261-4f50-be9c-a2a363c260a8",
-      "Name": "AB",
-      "ExecutablePath": "D:\\Project\\watchdog\\TestConsole\\TestConsole\\bin\\Release\\net9.0\\TestConsole.exe",
-      "Arguments": "string",
-      "WorkingDirectory": "D:\\Project\\watchdog\\TestConsole\\TestConsole\\bin\\Release\\net9.0",
-      "DesiredInstances": 5,
-      "PortRequirements": [
-        {
-          "Name": "string",
-          "InternalPort": 0,
-          "Protocol": "string",
-          "Required": true
-        }
-      ],
-      "EnvironmentVariables": {
-        "additionalProp1": "string",
-        "additionalProp2": "string",
-        "additionalProp3": "string"
-      },
-      "HealthCheckUrl": "string",
-      "HealthCheckInterval": 300,
+      "Id": "polygon-001",
+      "Name": "TestConsole",
+      "ExecutablePath": "/var/www/html/PEP-Development/Watchdog/TestConsole/TestConsole/bin/Debug/net9.0/TestConsole",
+      "Arguments": "",
+      "WorkingDirectory": "",
+      "DesiredInstances": 3,
+      "PortRequirements": [],
+      "EnvironmentVariables": {},
+      "HealthCheckUrl": "",
+      "HealthCheckInterval": 10,
       "MaxRestartAttempts": 3,
       "RestartDelaySeconds": 10
     }
   ],
   "Instances": [
     {
-      "InstanceId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8-local-agent-01-b96977796fd54ce4a2d034dd08526296",
-      "ApplicationId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8",
+      "InstanceId": "polygon-001-local-agent-01-6575a0ba5fe245ce965941b62374c326",
+      "ApplicationId": "polygon-001",
       "Command": {
-        "ApplicationId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8",
-        "InstanceId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8-local-agent-01-b96977796fd54ce4a2d034dd08526296",
-        "ExecutablePath": "D:\\Project\\watchdog\\TestConsole\\TestConsole\\bin\\Release\\net9.0\\TestConsole.exe",
-        "Arguments": "string",
-        "WorkingDirectory": "D:\\Project\\watchdog\\TestConsole\\TestConsole\\bin\\Release\\net9.0",
-        "EnvironmentVariables": {
-          "additionalProp1": "string",
-          "additionalProp2": "string",
-          "additionalProp3": "string"
-        },
-        "Ports": [
-          {
-            "Name": "port-0",
-            "InternalPort": 30000,
-            "ExternalPort": 30000,
-            "Protocol": "TCP"
-          }
-        ],
-        "HealthCheckUrl": "string",
-        "HealthCheckInterval": 30,
-        "InstanceIndex": 0
-      },
-      "IsWindowsService": false,
-      "WindowsServiceName": null,
-      "PersistWindowsService": false,
-      "Status": 5,
-      "ProcessId": 1924,
-      "Ports": [
-        {
-          "Name": "port-0",
-          "InternalPort": 30000,
-          "ExternalPort": 30000,
-          "Protocol": "TCP"
-        }
-      ],
-      "Metrics": {
-        "CpuPercent": 0,
-        "MemoryMB": 21.9921875,
-        "ThreadCount": 6,
-        "HandleCount": 176,
-        "IoReadBytes": 1924,
-        "IoWriteBytes": 1924,
-        "CollectedAt": "2026-01-28T18:35:37.1269796Z"
-      },
-      "CreatedAt": "2026-01-28T18:34:50.9201412Z",
-      "StartedAt": "2026-01-28T18:35:20.9449985Z",
-      "StoppedAt": "2026-01-28T18:35:48.0202397Z",
-      "StopReported": false,
-      "LastHealthCheck": "2026-01-28T18:35:37.1269874Z",
-      "RestartCount": 0,
-      "LastRestartAttempt": null,
-      "LastError": "Health check failed",
-      "ReattachedAt": null
-    },
-    {
-      "InstanceId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8-local-agent-01-dae375932ef4463aaa9a9d1242645532",
-      "ApplicationId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8",
-      "Command": {
-        "ApplicationId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8",
-        "InstanceId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8-local-agent-01-dae375932ef4463aaa9a9d1242645532",
-        "ExecutablePath": "D:\\Project\\watchdog\\TestConsole\\TestConsole\\bin\\Release\\net9.0\\TestConsole.exe",
-        "Arguments": "string",
-        "WorkingDirectory": "D:\\Project\\watchdog\\TestConsole\\TestConsole\\bin\\Release\\net9.0",
+        "ApplicationId": "polygon-001",
+        "InstanceId": "polygon-001-local-agent-01-6575a0ba5fe245ce965941b62374c326",
+        "ExecutablePath": "/var/www/html/PEP-Development/Watchdog/TestConsole/TestConsole/bin/Debug/net9.0/TestConsole",
+        "Arguments": "",
+        "WorkingDirectory": "",
         "EnvironmentVariables": {},
         "Ports": [],
-        "HealthCheckUrl": "string",
+        "HealthCheckUrl": "",
         "HealthCheckInterval": 30,
-        "InstanceIndex": 0
-      },
-      "IsWindowsService": false,
-      "WindowsServiceName": null,
-      "PersistWindowsService": false,
-      "Status": 5,
-      "ProcessId": 17800,
-      "Ports": [
-        {
-          "Name": "port-0",
-          "InternalPort": 30000,
-          "ExternalPort": 30000,
-          "Protocol": "TCP"
-        }
-      ],
-      "Metrics": {
-        "CpuPercent": 0,
-        "MemoryMB": 22.109375,
-        "ThreadCount": 7,
-        "HandleCount": 181,
-        "IoReadBytes": 17800,
-        "IoWriteBytes": 17800,
-        "CollectedAt": "2026-01-25T19:40:05.7345376Z"
-      },
-      "CreatedAt": "2026-01-25T19:39:23.1942691Z",
-      "StartedAt": "2026-01-25T19:39:53.2520011Z",
-      "StoppedAt": "2026-01-28T18:24:46.931085Z",
-      "StopReported": false,
-      "LastHealthCheck": "2026-01-25T19:40:05.7345417Z",
-      "RestartCount": 0,
-      "LastRestartAttempt": null,
-      "LastError": "Instance is unhealthy",
-      "ReattachedAt": "2026-01-28T18:24:46.7534017Z"
-    },
-    {
-      "InstanceId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8-local-agent-01-4dae2c2f61734a8a82962dcf64eafa76",
-      "ApplicationId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8",
-      "Command": {
-        "ApplicationId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8",
-        "InstanceId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8-local-agent-01-4dae2c2f61734a8a82962dcf64eafa76",
-        "ExecutablePath": "D:\\Project\\watchdog\\TestConsole\\TestConsole\\bin\\Release\\net9.0\\TestConsole.exe",
-        "Arguments": "string",
-        "WorkingDirectory": "D:\\Project\\watchdog\\TestConsole\\TestConsole\\bin\\Release\\net9.0",
-        "EnvironmentVariables": {
-          "additionalProp1": "string",
-          "additionalProp2": "string",
-          "additionalProp3": "string"
-        },
-        "Ports": [
-          {
-            "Name": "port-0",
-            "InternalPort": 30000,
-            "ExternalPort": 30000,
-            "Protocol": "TCP"
-          }
-        ],
-        "HealthCheckUrl": "string",
-        "HealthCheckInterval": 30,
-        "InstanceIndex": 0
-      },
-      "IsWindowsService": false,
-      "WindowsServiceName": null,
-      "PersistWindowsService": false,
-      "Status": 5,
-      "ProcessId": 16164,
-      "Ports": [
-        {
-          "Name": "port-0",
-          "InternalPort": 30000,
-          "ExternalPort": 30000,
-          "Protocol": "TCP"
-        }
-      ],
-      "Metrics": {
-        "CpuPercent": 0,
-        "MemoryMB": 21.9609375,
-        "ThreadCount": 6,
-        "HandleCount": 176,
-        "IoReadBytes": 16164,
-        "IoWriteBytes": 16164,
-        "CollectedAt": "2026-01-28T18:38:37.1374146Z"
-      },
-      "CreatedAt": "2026-01-28T18:37:51.3157836Z",
-      "StartedAt": "2026-01-28T18:38:21.3235489Z",
-      "StoppedAt": "2026-01-28T18:38:48.0198937Z",
-      "StopReported": false,
-      "LastHealthCheck": "2026-01-28T18:38:37.1374212Z",
-      "RestartCount": 0,
-      "LastRestartAttempt": null,
-      "LastError": "Health check failed",
-      "ReattachedAt": null
-    },
-    {
-      "InstanceId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8-local-agent-01-d428f0c30da7478383575df49c3fbfbe",
-      "ApplicationId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8",
-      "Command": {
-        "ApplicationId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8",
-        "InstanceId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8-local-agent-01-d428f0c30da7478383575df49c3fbfbe",
-        "ExecutablePath": "D:\\Project\\watchdog\\TestConsole\\TestConsole\\bin\\Release\\net9.0\\TestConsole.exe",
-        "Arguments": "string",
-        "WorkingDirectory": "D:\\Project\\watchdog\\TestConsole\\TestConsole\\bin\\Release\\net9.0",
-        "EnvironmentVariables": {
-          "additionalProp1": "string",
-          "additionalProp2": "string",
-          "additionalProp3": "string"
-        },
-        "Ports": [
-          {
-            "Name": "port-0",
-            "InternalPort": 30000,
-            "ExternalPort": 30000,
-            "Protocol": "TCP"
-          }
-        ],
-        "HealthCheckUrl": "string",
-        "HealthCheckInterval": 30,
-        "InstanceIndex": 0
-      },
-      "IsWindowsService": false,
-      "WindowsServiceName": null,
-      "PersistWindowsService": false,
-      "Status": 5,
-      "ProcessId": 15432,
-      "Ports": [
-        {
-          "Name": "port-0",
-          "InternalPort": 30000,
-          "ExternalPort": 30000,
-          "Protocol": "TCP"
-        }
-      ],
-      "Metrics": {
-        "CpuPercent": 0,
-        "MemoryMB": 21.96875,
-        "ThreadCount": 6,
-        "HandleCount": 176,
-        "IoReadBytes": 15432,
-        "IoWriteBytes": 15432,
-        "CollectedAt": "2026-01-28T18:36:37.1367847Z"
-      },
-      "CreatedAt": "2026-01-28T18:35:51.0169658Z",
-      "StartedAt": "2026-01-28T18:36:21.0632155Z",
-      "StoppedAt": "2026-01-28T18:36:48.0015229Z",
-      "StopReported": false,
-      "LastHealthCheck": "2026-01-28T18:36:37.1367936Z",
-      "RestartCount": 0,
-      "LastRestartAttempt": null,
-      "LastError": "Health check failed",
-      "ReattachedAt": null
-    },
-    {
-      "InstanceId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8-local-agent-01-4057f90674ec4917b96d664a53352f67",
-      "ApplicationId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8",
-      "Command": {
-        "ApplicationId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8",
-        "InstanceId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8-local-agent-01-4057f90674ec4917b96d664a53352f67",
-        "ExecutablePath": "D:\\Project\\watchdog\\TestConsole\\TestConsole\\bin\\Release\\net9.0\\TestConsole.exe",
-        "Arguments": "string",
-        "WorkingDirectory": "D:\\Project\\watchdog\\TestConsole\\TestConsole\\bin\\Release\\net9.0",
-        "EnvironmentVariables": {
-          "additionalProp1": "string",
-          "additionalProp2": "string",
-          "additionalProp3": "string"
-        },
-        "Ports": [
-          {
-            "Name": "port-0",
-            "InternalPort": 30000,
-            "ExternalPort": 30000,
-            "Protocol": "TCP"
-          }
-        ],
-        "HealthCheckUrl": "string",
-        "HealthCheckInterval": 30,
-        "InstanceIndex": 0
-      },
-      "IsWindowsService": false,
-      "WindowsServiceName": null,
-      "PersistWindowsService": false,
-      "Status": 5,
-      "ProcessId": 11764,
-      "Ports": [
-        {
-          "Name": "port-0",
-          "InternalPort": 30000,
-          "ExternalPort": 30000,
-          "Protocol": "TCP"
-        }
-      ],
-      "Metrics": {
-        "CpuPercent": 0,
-        "MemoryMB": 23.7890625,
-        "ThreadCount": 6,
-        "HandleCount": 176,
-        "IoReadBytes": 11764,
-        "IoWriteBytes": 11764,
-        "CollectedAt": "2026-01-28T18:26:37.1379096Z"
-      },
-      "CreatedAt": "2026-01-28T18:25:47.3500418Z",
-      "StartedAt": "2026-01-28T18:26:17.8969947Z",
-      "StoppedAt": "2026-01-28T18:26:48.05677Z",
-      "StopReported": false,
-      "LastHealthCheck": "2026-01-28T18:26:37.1379218Z",
-      "RestartCount": 0,
-      "LastRestartAttempt": null,
-      "LastError": "Health check failed",
-      "ReattachedAt": null
-    },
-    {
-      "InstanceId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8-local-agent-01-22ec2c36048f4ec19a22a53c05a74893",
-      "ApplicationId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8",
-      "Command": {
-        "ApplicationId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8",
-        "InstanceId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8-local-agent-01-22ec2c36048f4ec19a22a53c05a74893",
-        "ExecutablePath": "D:\\Project\\watchdog\\TestConsole\\TestConsole\\bin\\Release\\net9.0\\TestConsole.exe",
-        "Arguments": "string",
-        "WorkingDirectory": "D:\\Project\\watchdog\\TestConsole\\TestConsole\\bin\\Release\\net9.0",
-        "EnvironmentVariables": {
-          "additionalProp1": "string",
-          "additionalProp2": "string",
-          "additionalProp3": "string"
-        },
-        "Ports": [
-          {
-            "Name": "port-0",
-            "InternalPort": 30000,
-            "ExternalPort": 30000,
-            "Protocol": "TCP"
-          }
-        ],
-        "HealthCheckUrl": "string",
-        "HealthCheckInterval": 30,
-        "InstanceIndex": 0
+        "InstanceIndex": 2
       },
       "IsWindowsService": false,
       "WindowsServiceName": null,
       "PersistWindowsService": false,
       "Status": 2,
-      "ProcessId": 15064,
-      "Ports": [
-        {
-          "Name": "port-0",
-          "InternalPort": 30000,
-          "ExternalPort": 30000,
-          "Protocol": "TCP"
-        }
-      ],
+      "ProcessId": 85585,
+      "Ports": [],
       "Metrics": null,
-      "CreatedAt": "2026-01-28T18:39:51.4885116Z",
-      "StartedAt": "2026-01-28T18:40:21.53356Z",
+      "CreatedAt": "2026-02-08T12:17:48.4202693Z",
+      "StartedAt": "2026-02-08T12:18:18.4614384Z",
       "StoppedAt": null,
       "StopReported": false,
-      "LastHealthCheck": "2026-01-28T18:40:21.5335615Z",
+      "LastHealthCheck": "2026-02-08T12:18:18.4614394Z",
       "RestartCount": 0,
       "LastRestartAttempt": null,
       "LastError": null,
       "ReattachedAt": null
     },
     {
-      "InstanceId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8-local-agent-01-dca8fe4e1b8f47a68a30453653988a1e",
-      "ApplicationId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8",
+      "InstanceId": "polygon-001-local-agent-01-7219bb094c07442c9f1a8e7a52a3c1e7",
+      "ApplicationId": "polygon-001",
       "Command": {
-        "ApplicationId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8",
-        "InstanceId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8-local-agent-01-dca8fe4e1b8f47a68a30453653988a1e",
-        "ExecutablePath": "D:\\Project\\watchdog\\TestConsole\\TestConsole\\bin\\Release\\net9.0\\TestConsole.exe",
-        "Arguments": "string",
-        "WorkingDirectory": "D:\\Project\\watchdog\\TestConsole\\TestConsole\\bin\\Release\\net9.0",
-        "EnvironmentVariables": {
-          "additionalProp1": "string",
-          "additionalProp2": "string",
-          "additionalProp3": "string"
-        },
-        "Ports": [
-          {
-            "Name": "port-0",
-            "InternalPort": 30000,
-            "ExternalPort": 30000,
-            "Protocol": "TCP"
-          }
-        ],
-        "HealthCheckUrl": "string",
+        "ApplicationId": "polygon-001",
+        "InstanceId": "polygon-001-local-agent-01-7219bb094c07442c9f1a8e7a52a3c1e7",
+        "ExecutablePath": "/var/www/html/PEP-Development/Watchdog/TestConsole/TestConsole/bin/Debug/net9.0/TestConsole",
+        "Arguments": "",
+        "WorkingDirectory": "",
+        "EnvironmentVariables": {},
+        "Ports": [],
+        "HealthCheckUrl": "",
         "HealthCheckInterval": 30,
-        "InstanceIndex": 0
+        "InstanceIndex": 1
       },
       "IsWindowsService": false,
       "WindowsServiceName": null,
       "PersistWindowsService": false,
-      "Status": 5,
-      "ProcessId": 11084,
-      "Ports": [
-        {
-          "Name": "port-0",
-          "InternalPort": 30000,
-          "ExternalPort": 30000,
-          "Protocol": "TCP"
-        }
-      ],
-      "Metrics": {
-        "CpuPercent": 0,
-        "MemoryMB": 22.5234375,
-        "ThreadCount": 6,
-        "HandleCount": 179,
-        "IoReadBytes": 11084,
-        "IoWriteBytes": 11084,
-        "CollectedAt": "2026-01-28T18:37:37.1484009Z"
-      },
-      "CreatedAt": "2026-01-28T18:36:51.1706348Z",
-      "StartedAt": "2026-01-28T18:37:21.2445545Z",
-      "StoppedAt": "2026-01-28T18:37:47.9932861Z",
+      "Status": 2,
+      "ProcessId": 85213,
+      "Ports": [],
+      "Metrics": null,
+      "CreatedAt": "2026-02-08T12:17:18.3420358Z",
+      "StartedAt": "2026-02-08T12:17:48.4098675Z",
+      "StoppedAt": null,
       "StopReported": false,
-      "LastHealthCheck": "2026-01-28T18:37:37.148407Z",
+      "LastHealthCheck": "2026-02-08T12:17:48.4098681Z",
       "RestartCount": 0,
       "LastRestartAttempt": null,
-      "LastError": "Health check failed",
+      "LastError": null,
       "ReattachedAt": null
     },
     {
-      "InstanceId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8-local-agent-01-c64394a99da649dfa5c8cebf8260f2ca",
-      "ApplicationId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8",
+      "InstanceId": "polygon-001-local-agent-01-15f2c5bc65ac4f889a3acc50a50f70bb",
+      "ApplicationId": "polygon-001",
       "Command": {
-        "ApplicationId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8",
-        "InstanceId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8-local-agent-01-c64394a99da649dfa5c8cebf8260f2ca",
-        "ExecutablePath": "D:\\Project\\watchdog\\TestConsole\\TestConsole\\bin\\Release\\net9.0\\TestConsole.exe",
-        "Arguments": "string",
-        "WorkingDirectory": "D:\\Project\\watchdog\\TestConsole\\TestConsole\\bin\\Release\\net9.0",
-        "EnvironmentVariables": {
-          "additionalProp1": "string",
-          "additionalProp2": "string",
-          "additionalProp3": "string"
-        },
-        "Ports": [
-          {
-            "Name": "port-0",
-            "InternalPort": 30000,
-            "ExternalPort": 30000,
-            "Protocol": "TCP"
-          }
-        ],
-        "HealthCheckUrl": "string",
+        "ApplicationId": "polygon-001",
+        "InstanceId": "polygon-001-local-agent-01-15f2c5bc65ac4f889a3acc50a50f70bb",
+        "ExecutablePath": "/var/www/html/PEP-Development/Watchdog/TestConsole/TestConsole/bin/Debug/net9.0/TestConsole",
+        "Arguments": "",
+        "WorkingDirectory": "",
+        "EnvironmentVariables": {},
+        "Ports": [],
+        "HealthCheckUrl": "",
         "HealthCheckInterval": 30,
-        "InstanceIndex": 0
+        "InstanceIndex": 1
       },
       "IsWindowsService": false,
       "WindowsServiceName": null,
       "PersistWindowsService": false,
-      "Status": 5,
-      "ProcessId": 14688,
-      "Ports": [
-        {
-          "Name": "port-0",
-          "InternalPort": 30000,
-          "ExternalPort": 30000,
-          "Protocol": "TCP"
-        }
-      ],
-      "Metrics": {
-        "CpuPercent": 0,
-        "MemoryMB": 22.9375,
-        "ThreadCount": 6,
-        "HandleCount": 176,
-        "IoReadBytes": 14688,
-        "IoWriteBytes": 14688,
-        "CollectedAt": "2026-01-28T18:39:37.1401747Z"
-      },
-      "CreatedAt": "2026-01-28T18:38:51.3920409Z",
-      "StartedAt": "2026-01-28T18:39:21.4239585Z",
-      "StoppedAt": "2026-01-28T18:39:47.9820932Z",
+      "Status": 2,
+      "ProcessId": 74452,
+      "Ports": [],
+      "Metrics": null,
+      "CreatedAt": "2026-02-08T12:01:17.2213348Z",
+      "StartedAt": "2026-02-08T12:01:47.260594Z",
+      "StoppedAt": null,
       "StopReported": false,
-      "LastHealthCheck": "2026-01-28T18:39:37.1401866Z",
+      "LastHealthCheck": "2026-02-08T12:01:47.2605948Z",
       "RestartCount": 0,
       "LastRestartAttempt": null,
-      "LastError": "Health check failed",
+      "LastError": null,
       "ReattachedAt": null
     },
     {
-      "InstanceId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8-local-agent-01-422b63742ed84cafaa35ddedaa2ce524",
-      "ApplicationId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8",
+      "InstanceId": "polygon-001-adopted-72491",
+      "ApplicationId": "polygon-001",
       "Command": {
-        "ApplicationId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8",
-        "InstanceId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8-local-agent-01-422b63742ed84cafaa35ddedaa2ce524",
-        "ExecutablePath": "D:\\Project\\watchdog\\TestConsole\\TestConsole\\bin\\Release\\net9.0\\TestConsole.exe",
-        "Arguments": "string",
-        "WorkingDirectory": "D:\\Project\\watchdog\\TestConsole\\TestConsole\\bin\\Release\\net9.0",
-        "EnvironmentVariables": {
-          "additionalProp1": "string",
-          "additionalProp2": "string",
-          "additionalProp3": "string"
-        },
-        "Ports": [
-          {
-            "Name": "port-0",
-            "InternalPort": 30000,
-            "ExternalPort": 30000,
-            "Protocol": "TCP"
-          }
-        ],
-        "HealthCheckUrl": "string",
-        "HealthCheckInterval": 30,
+        "ApplicationId": "polygon-001",
+        "InstanceId": "polygon-001-adopted-72491",
+        "ExecutablePath": "/var/www/html/PEP-Development/Watchdog/TestConsole/TestConsole/bin/Debug/net9.0/TestConsole",
+        "Arguments": "",
+        "WorkingDirectory": "",
+        "EnvironmentVariables": {},
+        "Ports": [],
+        "HealthCheckUrl": "",
+        "HealthCheckInterval": 10,
         "InstanceIndex": 0
       },
       "IsWindowsService": false,
       "WindowsServiceName": null,
       "PersistWindowsService": false,
-      "Status": 5,
-      "ProcessId": 15124,
-      "Ports": [
-        {
-          "Name": "port-0",
-          "InternalPort": 30000,
-          "ExternalPort": 30000,
-          "Protocol": "TCP"
-        }
-      ],
-      "Metrics": {
-        "CpuPercent": 0,
-        "MemoryMB": 21.55078125,
-        "ThreadCount": 5,
-        "HandleCount": 176,
-        "IoReadBytes": 15124,
-        "IoWriteBytes": 15124,
-        "CollectedAt": "2026-01-28T18:34:37.1387171Z"
-      },
-      "CreatedAt": "2026-01-28T18:33:50.7156461Z",
-      "StartedAt": "2026-01-28T18:34:20.8054294Z",
-      "StoppedAt": "2026-01-28T18:34:47.9855881Z",
+      "Status": 2,
+      "ProcessId": 72491,
+      "Ports": [],
+      "Metrics": null,
+      "CreatedAt": "2026-02-08T11:58:58.298728Z",
+      "StartedAt": "2026-02-08T17:58:31.3126724+06:00",
+      "StoppedAt": null,
       "StopReported": false,
-      "LastHealthCheck": "2026-01-28T18:34:37.138724Z",
+      "LastHealthCheck": "2026-02-08T11:58:58.3115218Z",
       "RestartCount": 0,
       "LastRestartAttempt": null,
-      "LastError": "Health check failed",
+      "LastError": null,
       "ReattachedAt": null
     },
     {
-      "InstanceId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8-local-agent-01-35b735b69d004a7f8f7e298557fe6de8",
-      "ApplicationId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8",
+      "InstanceId": "polygon-001-local-agent-01-9ef174ec64884ce0acae9d53f894ad56",
+      "ApplicationId": "polygon-001",
       "Command": {
-        "ApplicationId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8",
-        "InstanceId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8-local-agent-01-35b735b69d004a7f8f7e298557fe6de8",
-        "ExecutablePath": "D:\\Project\\watchdog\\TestConsole\\TestConsole\\bin\\Release\\net9.0\\TestConsole.exe",
-        "Arguments": "string",
-        "WorkingDirectory": "D:\\Project\\watchdog\\TestConsole\\TestConsole\\bin\\Release\\net9.0",
-        "EnvironmentVariables": {
-          "additionalProp1": "string",
-          "additionalProp2": "string",
-          "additionalProp3": "string"
-        },
-        "Ports": [
-          {
-            "Name": "port-0",
-            "InternalPort": 30000,
-            "ExternalPort": 30000,
-            "Protocol": "TCP"
-          }
-        ],
-        "HealthCheckUrl": "string",
+        "ApplicationId": "polygon-001",
+        "InstanceId": "polygon-001-local-agent-01-9ef174ec64884ce0acae9d53f894ad56",
+        "ExecutablePath": "/var/www/html/PEP-Development/Watchdog/TestConsole/TestConsole/bin/Debug/net9.0/TestConsole",
+        "Arguments": "",
+        "WorkingDirectory": "",
+        "EnvironmentVariables": {},
+        "Ports": [],
+        "HealthCheckUrl": "",
         "HealthCheckInterval": 30,
-        "InstanceIndex": 0
+        "InstanceIndex": 3
       },
       "IsWindowsService": false,
       "WindowsServiceName": null,
       "PersistWindowsService": false,
-      "Status": 5,
-      "ProcessId": 2264,
-      "Ports": [
-        {
-          "Name": "port-0",
-          "InternalPort": 30000,
-          "ExternalPort": 30000,
-          "Protocol": "TCP"
-        }
-      ],
-      "Metrics": {
-        "CpuPercent": 0,
-        "MemoryMB": 22.890625,
-        "ThreadCount": 6,
-        "HandleCount": 176,
-        "IoReadBytes": 2264,
-        "IoWriteBytes": 2264,
-        "CollectedAt": "2026-01-28T18:33:37.1494827Z"
-      },
-      "CreatedAt": "2026-01-28T18:32:50.5182286Z",
-      "StartedAt": "2026-01-28T18:33:20.6019001Z",
-      "StoppedAt": "2026-01-28T18:33:47.993396Z",
+      "Status": 2,
+      "ProcessId": 74124,
+      "Ports": [],
+      "Metrics": null,
+      "CreatedAt": "2026-02-08T12:00:47.1588085Z",
+      "StartedAt": "2026-02-08T12:01:17.2148379Z",
+      "StoppedAt": null,
       "StopReported": false,
-      "LastHealthCheck": "2026-01-28T18:33:37.1494879Z",
+      "LastHealthCheck": "2026-02-08T12:01:17.2148388Z",
       "RestartCount": 0,
       "LastRestartAttempt": null,
-      "LastError": "Instance is unhealthy",
+      "LastError": null,
       "ReattachedAt": null
     },
     {
-      "InstanceId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8-local-agent-01-005995eed0e74352b6d4a121b0d3f62b",
-      "ApplicationId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8",
+      "InstanceId": "polygon-001-local-agent-01-0a334ba979f946f0a4aba7ea45a34a00",
+      "ApplicationId": "polygon-001",
       "Command": {
-        "ApplicationId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8",
-        "InstanceId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8-local-agent-01-005995eed0e74352b6d4a121b0d3f62b",
-        "ExecutablePath": "D:\\Project\\watchdog\\TestConsole\\TestConsole\\bin\\Release\\net9.0\\TestConsole.exe",
-        "Arguments": "string",
-        "WorkingDirectory": "D:\\Project\\watchdog\\TestConsole\\TestConsole\\bin\\Release\\net9.0",
-        "EnvironmentVariables": {
-          "additionalProp1": "string",
-          "additionalProp2": "string",
-          "additionalProp3": "string"
-        },
-        "Ports": [
-          {
-            "Name": "port-0",
-            "InternalPort": 30000,
-            "ExternalPort": 30000,
-            "Protocol": "TCP"
-          }
-        ],
-        "HealthCheckUrl": "string",
+        "ApplicationId": "polygon-001",
+        "InstanceId": "polygon-001-local-agent-01-0a334ba979f946f0a4aba7ea45a34a00",
+        "ExecutablePath": "/var/www/html/PEP-Development/Watchdog/TestConsole/TestConsole/bin/Debug/net9.0/TestConsole",
+        "Arguments": "",
+        "WorkingDirectory": "",
+        "EnvironmentVariables": {},
+        "Ports": [],
+        "HealthCheckUrl": "",
         "HealthCheckInterval": 30,
-        "InstanceIndex": 0
+        "InstanceIndex": 1
       },
       "IsWindowsService": false,
       "WindowsServiceName": null,
       "PersistWindowsService": false,
       "Status": 5,
-      "ProcessId": 11860,
-      "Ports": [
-        {
-          "Name": "port-0",
-          "InternalPort": 30000,
-          "ExternalPort": 30000,
-          "Protocol": "TCP"
-        }
-      ],
-      "Metrics": {
-        "CpuPercent": 0,
-        "MemoryMB": 22.8671875,
-        "ThreadCount": 8,
-        "HandleCount": 179,
-        "IoReadBytes": 11860,
-        "IoWriteBytes": 11860,
-        "CollectedAt": "2026-01-28T18:29:37.1388823Z"
-      },
-      "CreatedAt": "2026-01-28T18:28:49.7741365Z",
-      "StartedAt": "2026-01-28T18:29:19.8150338Z",
-      "StoppedAt": "2026-01-28T18:29:47.9505412Z",
+      "ProcessId": 73415,
+      "Ports": [],
+      "Metrics": null,
+      "CreatedAt": "2026-02-08T11:59:47.032573Z",
+      "StartedAt": "2026-02-08T12:00:17.0972398Z",
+      "StoppedAt": "2026-02-08T12:03:48.2778886Z",
       "StopReported": false,
-      "LastHealthCheck": "2026-01-28T18:29:37.1388882Z",
+      "LastHealthCheck": "2026-02-08T12:00:17.0972403Z",
       "RestartCount": 0,
       "LastRestartAttempt": null,
-      "LastError": "Instance is unhealthy",
+      "LastError": null,
       "ReattachedAt": null
     },
     {
-      "InstanceId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8-local-agent-01-36db58ce4ea64b24a41169668d762aee",
-      "ApplicationId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8",
+      "InstanceId": "polygon-001-local-agent-01-1e5749ca3a044d94823965f3dd064d38",
+      "ApplicationId": "polygon-001",
       "Command": {
-        "ApplicationId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8",
-        "InstanceId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8-local-agent-01-36db58ce4ea64b24a41169668d762aee",
-        "ExecutablePath": "D:\\Project\\watchdog\\TestConsole\\TestConsole\\bin\\Release\\net9.0\\TestConsole.exe",
-        "Arguments": "string",
-        "WorkingDirectory": "D:\\Project\\watchdog\\TestConsole\\TestConsole\\bin\\Release\\net9.0",
-        "EnvironmentVariables": {
-          "additionalProp1": "string",
-          "additionalProp2": "string",
-          "additionalProp3": "string"
-        },
-        "Ports": [
-          {
-            "Name": "port-0",
-            "InternalPort": 30000,
-            "ExternalPort": 30000,
-            "Protocol": "TCP"
-          }
-        ],
-        "HealthCheckUrl": "string",
+        "ApplicationId": "polygon-001",
+        "InstanceId": "polygon-001-local-agent-01-1e5749ca3a044d94823965f3dd064d38",
+        "ExecutablePath": "/var/www/html/PEP-Development/Watchdog/TestConsole/TestConsole/bin/Debug/net9.0/TestConsole",
+        "Arguments": "",
+        "WorkingDirectory": "",
+        "EnvironmentVariables": {},
+        "Ports": [],
+        "HealthCheckUrl": "",
         "HealthCheckInterval": 30,
-        "InstanceIndex": 0
+        "InstanceIndex": 2
       },
       "IsWindowsService": false,
       "WindowsServiceName": null,
       "PersistWindowsService": false,
-      "Status": 5,
-      "ProcessId": 15432,
-      "Ports": [
-        {
-          "Name": "port-0",
-          "InternalPort": 30000,
-          "ExternalPort": 30000,
-          "Protocol": "TCP"
-        }
-      ],
-      "Metrics": {
-        "CpuPercent": 0,
-        "MemoryMB": 22.90234375,
-        "ThreadCount": 7,
-        "HandleCount": 176,
-        "IoReadBytes": 15432,
-        "IoWriteBytes": 15432,
-        "CollectedAt": "2026-01-28T18:30:37.1423104Z"
-      },
-      "CreatedAt": "2026-01-28T18:29:50.0271149Z",
-      "StartedAt": "2026-01-28T18:30:20.0907599Z",
-      "StoppedAt": "2026-01-28T18:30:47.9510707Z",
+      "Status": 2,
+      "ProcessId": 62529,
+      "Ports": [],
+      "Metrics": null,
+      "CreatedAt": "2026-02-08T11:46:21.8883673Z",
+      "StartedAt": "2026-02-08T11:46:51.9289929Z",
+      "StoppedAt": null,
       "StopReported": false,
-      "LastHealthCheck": "2026-01-28T18:30:37.1423167Z",
+      "LastHealthCheck": "2026-02-08T11:46:51.9289936Z",
       "RestartCount": 0,
       "LastRestartAttempt": null,
-      "LastError": "Health check failed",
+      "LastError": null,
       "ReattachedAt": null
     },
     {
-      "InstanceId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8-local-agent-01-2801e2f3cf77415e96a19efb5ad5fc28",
-      "ApplicationId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8",
+      "InstanceId": "polygon-001-local-agent-01-2700fe2901924592bd3864ae31b7a8da",
+      "ApplicationId": "polygon-001",
       "Command": {
-        "ApplicationId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8",
-        "InstanceId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8-local-agent-01-2801e2f3cf77415e96a19efb5ad5fc28",
-        "ExecutablePath": "D:\\Project\\watchdog\\TestConsole\\TestConsole\\bin\\Release\\net9.0\\TestConsole.exe",
-        "Arguments": "string",
-        "WorkingDirectory": "D:\\Project\\watchdog\\TestConsole\\TestConsole\\bin\\Release\\net9.0",
-        "EnvironmentVariables": {
-          "additionalProp1": "string",
-          "additionalProp2": "string",
-          "additionalProp3": "string"
-        },
-        "Ports": [
-          {
-            "Name": "port-0",
-            "InternalPort": 30000,
-            "ExternalPort": 30000,
-            "Protocol": "TCP"
-          }
-        ],
-        "HealthCheckUrl": "string",
+        "ApplicationId": "polygon-001",
+        "InstanceId": "polygon-001-local-agent-01-2700fe2901924592bd3864ae31b7a8da",
+        "ExecutablePath": "/var/www/html/PEP-Development/Watchdog/TestConsole/TestConsole/bin/Debug/net9.0/TestConsole",
+        "Arguments": "",
+        "WorkingDirectory": "",
+        "EnvironmentVariables": {},
+        "Ports": [],
+        "HealthCheckUrl": "",
         "HealthCheckInterval": 30,
-        "InstanceIndex": 0
+        "InstanceIndex": 2
       },
       "IsWindowsService": false,
       "WindowsServiceName": null,
       "PersistWindowsService": false,
-      "Status": 5,
-      "ProcessId": 10068,
-      "Ports": [
-        {
-          "Name": "port-0",
-          "InternalPort": 30000,
-          "ExternalPort": 30000,
-          "Protocol": "TCP"
-        }
-      ],
-      "Metrics": {
-        "CpuPercent": 0,
-        "MemoryMB": 22.96484375,
-        "ThreadCount": 5,
-        "HandleCount": 176,
-        "IoReadBytes": 10068,
-        "IoWriteBytes": 10068,
-        "CollectedAt": "2026-01-28T18:32:37.136706Z"
-      },
-      "CreatedAt": "2026-01-28T18:31:50.3673065Z",
-      "StartedAt": "2026-01-28T18:32:20.4502879Z",
-      "StoppedAt": "2026-01-28T18:32:47.9938891Z",
+      "Status": 2,
+      "ProcessId": 73741,
+      "Ports": [],
+      "Metrics": null,
+      "CreatedAt": "2026-02-08T12:00:17.1082973Z",
+      "StartedAt": "2026-02-08T12:00:47.1497181Z",
+      "StoppedAt": null,
       "StopReported": false,
-      "LastHealthCheck": "2026-01-28T18:32:37.1367146Z",
+      "LastHealthCheck": "2026-02-08T12:00:47.1497193Z",
       "RestartCount": 0,
       "LastRestartAttempt": null,
-      "LastError": "Health check failed",
+      "LastError": null,
       "ReattachedAt": null
     },
     {
-      "InstanceId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8-local-agent-01-ee345b6c20de4816960357a1158c4a22",
-      "ApplicationId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8",
+      "InstanceId": "polygon-001-local-agent-01-5279442b77754de8b55b3a06dd992d74",
+      "ApplicationId": "polygon-001",
       "Command": {
-        "ApplicationId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8",
-        "InstanceId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8-local-agent-01-ee345b6c20de4816960357a1158c4a22",
-        "ExecutablePath": "D:\\Project\\watchdog\\TestConsole\\TestConsole\\bin\\Release\\net9.0\\TestConsole.exe",
-        "Arguments": "string",
-        "WorkingDirectory": "D:\\Project\\watchdog\\TestConsole\\TestConsole\\bin\\Release\\net9.0",
-        "EnvironmentVariables": {
-          "additionalProp1": "string",
-          "additionalProp2": "string",
-          "additionalProp3": "string"
-        },
-        "Ports": [
-          {
-            "Name": "port-0",
-            "InternalPort": 30000,
-            "ExternalPort": 30000,
-            "Protocol": "TCP"
-          }
-        ],
-        "HealthCheckUrl": "string",
+        "ApplicationId": "polygon-001",
+        "InstanceId": "polygon-001-local-agent-01-5279442b77754de8b55b3a06dd992d74",
+        "ExecutablePath": "/var/www/html/PEP-Development/Watchdog/TestConsole/TestConsole/bin/Debug/net9.0/TestConsole",
+        "Arguments": "",
+        "WorkingDirectory": "",
+        "EnvironmentVariables": {},
+        "Ports": [],
+        "HealthCheckUrl": "",
         "HealthCheckInterval": 30,
-        "InstanceIndex": 0
+        "InstanceIndex": 3
       },
       "IsWindowsService": false,
       "WindowsServiceName": null,
       "PersistWindowsService": false,
-      "Status": 5,
-      "ProcessId": 6024,
-      "Ports": [
-        {
-          "Name": "port-0",
-          "InternalPort": 30000,
-          "ExternalPort": 30000,
-          "Protocol": "TCP"
-        }
-      ],
-      "Metrics": {
-        "CpuPercent": 3.1,
-        "MemoryMB": 23.81640625,
-        "ThreadCount": 6,
-        "HandleCount": 176,
-        "IoReadBytes": 6024,
-        "IoWriteBytes": 6024,
-        "CollectedAt": "2026-01-28T18:28:58.3441636Z"
-      },
-      "CreatedAt": "2026-01-28T18:27:48.1551702Z",
-      "StartedAt": "2026-01-28T18:28:18.2715858Z",
-      "StoppedAt": "2026-01-28T18:28:59.3856169Z",
+      "Status": 2,
+      "ProcessId": 62846,
+      "Ports": [],
+      "Metrics": null,
+      "CreatedAt": "2026-02-08T11:46:51.9356508Z",
+      "StartedAt": "2026-02-08T11:47:21.9685605Z",
+      "StoppedAt": null,
       "StopReported": false,
-      "LastHealthCheck": "2026-01-28T18:28:58.3441737Z",
+      "LastHealthCheck": "2026-02-08T11:47:21.9685611Z",
       "RestartCount": 0,
       "LastRestartAttempt": null,
-      "LastError": "Instance is unhealthy",
+      "LastError": null,
       "ReattachedAt": null
     },
     {
-      "InstanceId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8-local-agent-01-e12c3014fc4940eba94962063a01d8f7",
-      "ApplicationId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8",
+      "InstanceId": "polygon-001-local-agent-01-9f7d8209db7b46a28d2a9eb3d46463ad",
+      "ApplicationId": "polygon-001",
       "Command": {
-        "ApplicationId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8",
-        "InstanceId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8-local-agent-01-e12c3014fc4940eba94962063a01d8f7",
-        "ExecutablePath": "D:\\Project\\watchdog\\TestConsole\\TestConsole\\bin\\Release\\net9.0\\TestConsole.exe",
-        "Arguments": "string",
-        "WorkingDirectory": "D:\\Project\\watchdog\\TestConsole\\TestConsole\\bin\\Release\\net9.0",
-        "EnvironmentVariables": {
-          "additionalProp1": "string",
-          "additionalProp2": "string",
-          "additionalProp3": "string"
-        },
-        "Ports": [
-          {
-            "Name": "port-0",
-            "InternalPort": 30000,
-            "ExternalPort": 30000,
-            "Protocol": "TCP"
-          }
-        ],
-        "HealthCheckUrl": "string",
+        "ApplicationId": "polygon-001",
+        "InstanceId": "polygon-001-local-agent-01-9f7d8209db7b46a28d2a9eb3d46463ad",
+        "ExecutablePath": "/var/www/html/PEP-Development/Watchdog/TestConsole/TestConsole/bin/Debug/net9.0/TestConsole",
+        "Arguments": "",
+        "WorkingDirectory": "",
+        "EnvironmentVariables": {},
+        "Ports": [],
+        "HealthCheckUrl": "",
         "HealthCheckInterval": 30,
-        "InstanceIndex": 0
+        "InstanceIndex": 1
       },
       "IsWindowsService": false,
       "WindowsServiceName": null,
       "PersistWindowsService": false,
-      "Status": 5,
-      "ProcessId": 5480,
-      "Ports": [
-        {
-          "Name": "port-0",
-          "InternalPort": 30000,
-          "ExternalPort": 30000,
-          "Protocol": "TCP"
-        }
-      ],
-      "Metrics": {
-        "CpuPercent": 0,
-        "MemoryMB": 22.01953125,
-        "ThreadCount": 7,
-        "HandleCount": 176,
-        "IoReadBytes": 5480,
-        "IoWriteBytes": 5480,
-        "CollectedAt": "2026-01-28T18:25:37.1440449Z"
-      },
-      "CreatedAt": "2026-01-28T18:24:47.175958Z",
-      "StartedAt": "2026-01-28T18:25:17.2447729Z",
-      "StoppedAt": "2026-01-28T18:25:48.0604938Z",
+      "Status": 2,
+      "ProcessId": 62214,
+      "Ports": [],
+      "Metrics": null,
+      "CreatedAt": "2026-02-08T11:45:51.8104163Z",
+      "StartedAt": "2026-02-08T11:46:21.8753719Z",
+      "StoppedAt": null,
       "StopReported": false,
-      "LastHealthCheck": "2026-01-28T18:25:37.144049Z",
+      "LastHealthCheck": "2026-02-08T11:46:21.8753726Z",
       "RestartCount": 0,
       "LastRestartAttempt": null,
-      "LastError": "Health check failed",
+      "LastError": null,
       "ReattachedAt": null
     },
     {
-      "InstanceId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8-local-agent-01-c16d759f29c64777a722b5f0b18e4e51",
-      "ApplicationId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8",
+      "InstanceId": "polygon-039a254878c04f099e83fa548e02cf56",
+      "ApplicationId": "polygon-001",
       "Command": {
-        "ApplicationId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8",
-        "InstanceId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8-local-agent-01-c16d759f29c64777a722b5f0b18e4e51",
-        "ExecutablePath": "D:\\Project\\watchdog\\TestConsole\\TestConsole\\bin\\Release\\net9.0\\TestConsole.exe",
-        "Arguments": "string",
-        "WorkingDirectory": "D:\\Project\\watchdog\\TestConsole\\TestConsole\\bin\\Release\\net9.0",
-        "EnvironmentVariables": {
-          "additionalProp1": "string",
-          "additionalProp2": "string",
-          "additionalProp3": "string"
-        },
-        "Ports": [
-          {
-            "Name": "port-0",
-            "InternalPort": 30000,
-            "ExternalPort": 30000,
-            "Protocol": "TCP"
-          }
-        ],
-        "HealthCheckUrl": "string",
-        "HealthCheckInterval": 30,
+        "ApplicationId": "polygon-001",
+        "InstanceId": "polygon-039a254878c04f099e83fa548e02cf56",
+        "ExecutablePath": "/var/www/html/PEP-Development/Watchdog/TestConsole/TestConsole/bin/Debug/net9.0/TestConsole",
+        "Arguments": "",
+        "WorkingDirectory": "",
+        "EnvironmentVariables": {},
+        "Ports": [],
+        "HealthCheckUrl": "",
+        "HealthCheckInterval": 10,
         "InstanceIndex": 0
       },
       "IsWindowsService": false,
       "WindowsServiceName": null,
       "PersistWindowsService": false,
-      "Status": 5,
-      "ProcessId": 3184,
+      "Status": 2,
+      "ProcessId": 20580,
       "Ports": [
         {
-          "Name": "port-0",
-          "InternalPort": 30000,
-          "ExternalPort": 30000,
+          "Name": "http",
+          "InternalPort": 8080,
+          "ExternalPort": 8080,
           "Protocol": "TCP"
         }
       ],
-      "Metrics": {
-        "CpuPercent": 0,
-        "MemoryMB": 22.96484375,
-        "ThreadCount": 5,
-        "HandleCount": 176,
-        "IoReadBytes": 3184,
-        "IoWriteBytes": 3184,
-        "CollectedAt": "2026-01-28T18:31:37.1388402Z"
-      },
-      "CreatedAt": "2026-01-28T18:30:50.1361749Z",
-      "StartedAt": "2026-01-28T18:31:20.2464975Z",
-      "StoppedAt": "2026-01-28T18:31:47.983922Z",
+      "Metrics": null,
+      "CreatedAt": "1970-01-01T00:00:00Z",
+      "StartedAt": "1970-01-01T00:00:00Z",
+      "StoppedAt": null,
       "StopReported": false,
-      "LastHealthCheck": "2026-01-28T18:31:37.1388451Z",
+      "LastHealthCheck": null,
       "RestartCount": 0,
       "LastRestartAttempt": null,
-      "LastError": "Health check failed",
-      "ReattachedAt": null
-    },
-    {
-      "InstanceId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8-local-agent-01-890aa4a2c8724c72a30ccedb98a0adf1",
-      "ApplicationId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8",
-      "Command": {
-        "ApplicationId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8",
-        "InstanceId": "ecbd5a31-3261-4f50-be9c-a2a363c260a8-local-agent-01-890aa4a2c8724c72a30ccedb98a0adf1",
-        "ExecutablePath": "D:\\Project\\watchdog\\TestConsole\\TestConsole\\bin\\Release\\net9.0\\TestConsole.exe",
-        "Arguments": "string",
-        "WorkingDirectory": "D:\\Project\\watchdog\\TestConsole\\TestConsole\\bin\\Release\\net9.0",
-        "EnvironmentVariables": {
-          "additionalProp1": "string",
-          "additionalProp2": "string",
-          "additionalProp3": "string"
-        },
-        "Ports": [
-          {
-            "Name": "port-0",
-            "InternalPort": 30000,
-            "ExternalPort": 30000,
-            "Protocol": "TCP"
-          }
-        ],
-        "HealthCheckUrl": "string",
-        "HealthCheckInterval": 30,
-        "InstanceIndex": 0
-      },
-      "IsWindowsService": false,
-      "WindowsServiceName": null,
-      "PersistWindowsService": false,
-      "Status": 5,
-      "ProcessId": 7920,
-      "Ports": [
-        {
-          "Name": "port-0",
-          "InternalPort": 30000,
-          "ExternalPort": 30000,
-          "Protocol": "TCP"
-        }
-      ],
-      "Metrics": {
-        "CpuPercent": 0,
-        "MemoryMB": 23.546875,
-        "ThreadCount": 6,
-        "HandleCount": 176,
-        "IoReadBytes": 7920,
-        "IoWriteBytes": 7920,
-        "CollectedAt": "2026-01-28T18:27:37.1449933Z"
-      },
-      "CreatedAt": "2026-01-28T18:26:47.9882644Z",
-      "StartedAt": "2026-01-28T18:27:18.0291403Z",
-      "StoppedAt": "2026-01-28T18:27:48.1106714Z",
-      "StopReported": false,
-      "LastHealthCheck": "2026-01-28T18:27:37.1449992Z",
-      "RestartCount": 0,
-      "LastRestartAttempt": null,
-      "LastError": "Health check failed",
-      "ReattachedAt": null
+      "LastError": null,
+      "ReattachedAt": "2026-02-08T11:44:55.8989956Z"
     }
   ],
-  "SavedAt": "2026-01-28T18:40:21.5336026Z"
+  "SavedAt": "2026-02-08T12:18:18.4614648Z"
 }

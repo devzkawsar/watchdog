@@ -30,40 +30,50 @@ public class AgentManager : IAgentManager
         
         const string sql = @"
             SELECT 
-                Id, Name, IpAddress, Status,
-                TotalMemoryMB, AvailableMemoryMB, CpuCores,
-                AvailablePorts, LastHeartbeat, RegisteredAt
-            FROM Agents
-            ORDER BY Status DESC, Name";
+                id AS Id, 
+                name AS Name, 
+                ip_address AS IpAddress, 
+                status AS Status,
+                total_memory_mb AS TotalMemoryMB, 
+                available_memory_mb AS AvailableMemoryMB, 
+                cpu_cores AS CpuCores,
+                tags AS Tags, 
+                last_heartbeat AS LastHeartbeat, 
+                created AS Created,
+                updated AS Updated,
+                created_by AS CreatedBy,
+                updated_by AS UpdatedBy
+            FROM agent
+            ORDER BY status DESC, name";
         
         return await connection.QueryAsync<Agent>(sql);
     }
     
-    /// <summary>
-    /// Retrieves an agent by ID.
-    /// </summary>
-    /// <param name="id">The ID of the agent.</param>
-    /// <returns>The agent, or null if not found.</returns>
     public async Task<Agent?> GetAgent(string id)
     {
         using var connection = _connectionFactory.CreateConnection();
         
         const string sql = @"
             SELECT 
-                Id, Name, IpAddress, Status,
-                TotalMemoryMB, AvailableMemoryMB, CpuCores,
-                AvailablePorts, LastHeartbeat, RegisteredAt
-            FROM Agents
-            WHERE Id = @Id";
+                id AS Id, 
+                name AS Name, 
+                ip_address AS IpAddress, 
+                status AS Status,
+                total_memory_mb AS TotalMemoryMB, 
+                available_memory_mb AS AvailableMemoryMB, 
+                cpu_cores AS CpuCores,
+                tags AS Tags, 
+                last_heartbeat AS LastHeartbeat, 
+                created AS Created,
+                updated AS Updated,
+                created_by AS CreatedBy,
+                updated_by AS UpdatedBy
+            FROM agent
+            WHERE id = @Id";
         
         return await connection.QueryFirstOrDefaultAsync<Agent>(sql, new { Id = id });
     }
     
-    /// <summary>
-    /// Registers an agent.
-    /// </summary>
-    /// <param name="registration">The registration details.</param>
-    /// <returns>The registered agent.</returns>
     public async Task<Agent> RegisterAgent(AgentRegistration registration)
     {
         using var connection = _connectionFactory.CreateConnection();
@@ -77,29 +87,33 @@ public class AgentManager : IAgentManager
             TotalMemoryMB = registration.TotalMemoryMB,
             AvailableMemoryMB = registration.TotalMemoryMB,
             CpuCores = registration.CpuCores,
-            AvailablePorts = "[]", // Empty JSON array
+            OsVersion = registration.OsVersion,
+            Tags = "[]", // Empty JSON array
             LastHeartbeat = DateTime.UtcNow
         };
         
         const string sql = @"
-            MERGE Agents AS target
+            MERGE agent AS target
             USING (SELECT @Id AS Id) AS source
-            ON target.Id = source.Id
+            ON target.id = source.Id
             WHEN MATCHED THEN
                 UPDATE SET 
-                    Name = @Name,
-                    IpAddress = @IpAddress,
-                    Status = 'Online',
-                    TotalMemoryMB = @TotalMemoryMB,
-                    AvailableMemoryMB = @AvailableMemoryMB,
-                    CpuCores = @CpuCores,
-                    AvailablePorts = @AvailablePorts,
-                    LastHeartbeat = @LastHeartbeat
+                    name = @Name,
+                    ip_address = @IpAddress,
+                    status = 'online',
+                    total_memory_mb = @TotalMemoryMB,
+                    available_memory_mb = @AvailableMemoryMB,
+                    cpu_cores = @CpuCores,
+                    os_version = @OsVersion,
+                    tags = @Tags,
+                    last_heartbeat = @LastHeartbeat,
+                    updated = GETUTCDATE(),
+                    updated_by = NULL
             WHEN NOT MATCHED THEN
-                INSERT (Id, Name, IpAddress, Status, TotalMemoryMB, 
-                        AvailableMemoryMB, CpuCores, AvailablePorts, LastHeartbeat, RegisteredAt)
-                VALUES (@Id, @Name, @IpAddress, 'Online', @TotalMemoryMB, 
-                        @AvailableMemoryMB, @CpuCores, @AvailablePorts, @LastHeartbeat, GETUTCDATE());";
+                INSERT (id, name, ip_address, status, total_memory_mb, 
+                        available_memory_mb, cpu_cores, os_version, tags, last_heartbeat, created, created_by)
+                VALUES (@Id, @Name, @IpAddress, 'online', @TotalMemoryMB, 
+                        @AvailableMemoryMB, @CpuCores, @OsVersion, @Tags, @LastHeartbeat, GETUTCDATE(), NULL);";
         
         await connection.ExecuteAsync(sql, agent);
         
@@ -109,20 +123,16 @@ public class AgentManager : IAgentManager
         return agent;
     }
     
-    /// <summary>
-    /// Updates an agent's heartbeat.
-    /// </summary>
-    /// <param name="agentId">The ID of the agent.</param>
-    /// <returns>True if the agent was updated, false otherwise.</returns>
     public async Task<bool> UpdateAgentHeartbeat(string agentId)
     {
         using var connection = _connectionFactory.CreateConnection();
         
         const string sql = @"
-            UPDATE Agents 
-            SET LastHeartbeat = GETUTCDATE(),
-                Status = 'Online'
-            WHERE Id = @AgentId";
+            UPDATE agent 
+            SET last_heartbeat = GETUTCDATE(),
+                status = 'online',
+                updated = GETUTCDATE()
+            WHERE id = @AgentId";
         
         var result = await connection.ExecuteAsync(sql, new { AgentId = agentId });
         
@@ -136,19 +146,13 @@ public class AgentManager : IAgentManager
         return false;
     }
     
-    /// <summary>
-    /// Assigns an application to an agent.
-    /// </summary>
-    /// <param name="agentId">The ID of the agent.</param>
-    /// <param name="applicationId">The ID of the application.</param>
-    /// <returns>True if the application was assigned (or already assigned), false if agent or application not found.</returns>
     public async Task<bool> AssignApplicationToAgent(string agentId, string applicationId)
     {
         using var connection = _connectionFactory.CreateConnection();
         
         // Check if agent exists
         var agentExists = await connection.ExecuteScalarAsync<int>(
-            "SELECT COUNT(1) FROM Agents WHERE Id = @Id", new { Id = agentId }) > 0;
+            "SELECT COUNT(1) FROM agent WHERE id = @Id", new { Id = agentId }) > 0;
         
         if (!agentExists)
         {
@@ -158,7 +162,7 @@ public class AgentManager : IAgentManager
 
         // Check if application exists
         var applicationExists = await connection.ExecuteScalarAsync<int>(
-            "SELECT COUNT(1) FROM Applications WHERE Id = @Id", new { Id = applicationId }) > 0;
+            "SELECT COUNT(1) FROM application WHERE id = @Id", new { Id = applicationId }) > 0;
         
         if (!applicationExists)
         {
@@ -167,10 +171,10 @@ public class AgentManager : IAgentManager
         }
 
         const string sql = @"
-            IF NOT EXISTS (SELECT 1 FROM AgentApplications WHERE AgentId = @AgentId AND ApplicationId = @ApplicationId)
+            IF NOT EXISTS (SELECT 1 FROM agent_application WHERE agent_id = @AgentId AND application_id = @ApplicationId)
             BEGIN
-                INSERT INTO AgentApplications (AgentId, ApplicationId, CurrentInstancesOnAgent)
-                VALUES (@AgentId, @ApplicationId, 0);
+                INSERT INTO agent_application (agent_id, application_id, current_instances_on_agent, assigned_at)
+                VALUES (@AgentId, @ApplicationId, 0, GETUTCDATE());
             END";
         
         await connection.ExecuteAsync(sql, new
@@ -185,47 +189,60 @@ public class AgentManager : IAgentManager
         return true;
     }
     
-    /// <summary>
-    /// Retrieves a list of online agents.
-    /// </summary>
-    /// <returns>A list of online agents.</returns>
     public async Task<IEnumerable<Agent>> GetOnlineAgents()
     {
         using var connection = _connectionFactory.CreateConnection();
         
         const string sql = @"
             SELECT 
-                Id, Name, IpAddress, Status,
-                TotalMemoryMB, AvailableMemoryMB, CpuCores,
-                AvailablePorts, LastHeartbeat, RegisteredAt
-            FROM Agents
-            WHERE Status = 'Online'
-            AND LastHeartbeat > DATEADD(MINUTE, -5, GETUTCDATE())
-            ORDER BY AvailableMemoryMB DESC";
+                id AS Id, 
+                name AS Name, 
+                ip_address AS IpAddress, 
+                status AS Status,
+                total_memory_mb AS TotalMemoryMB, 
+                available_memory_mb AS AvailableMemoryMB, 
+                cpu_cores AS CpuCores,
+                tags AS Tags, 
+                last_heartbeat AS LastHeartbeat, 
+                created AS Created,
+                updated AS Updated,
+                created_by AS CreatedBy,
+                updated_by AS UpdatedBy
+            FROM agent
+            WHERE status = 'online'
+            AND last_heartbeat > DATEADD(MINUTE, -5, GETUTCDATE())
+            ORDER BY available_memory_mb DESC";
         
         return await connection.QueryAsync<Agent>(sql);
     }
     
-    /// <summary>
-    /// Retrieves a list of applications assigned to an agent.
-    /// </summary>
-    /// <param name="agentId">The ID of the agent.</param>
-    /// <returns>A list of applications assigned to the agent.</returns>
     public async Task<IEnumerable<Application>> GetAgentApplications(string agentId)
     {
         using var connection = _connectionFactory.CreateConnection();
         
         const string sql = @"
             SELECT 
-                a.Id, a.Name, a.DisplayName, a.ExecutablePath, a.Arguments, a.WorkingDirectory,
-                a.ApplicationType, a.HealthCheckUrl, a.HealthCheckInterval,
-                a.DesiredInstances, a.MinInstances, a.MaxInstances,
-                a.PortRequirements AS PortRequirementsJson, a.EnvironmentVariables AS EnvironmentVariablesJson, a.AutoStart,
-                a.CreatedAt, a.UpdatedAt
-            FROM Applications a
-            INNER JOIN AgentApplications aa ON a.Id = aa.ApplicationId
-            WHERE aa.AgentId = @AgentId
-            ORDER BY a.Name";
+                a.id AS Id, 
+                a.name AS Name, 
+                a.display_name AS DisplayName, 
+                a.executable_path AS ExecutablePath, 
+                a.arguments AS Arguments, 
+                a.working_directory AS WorkingDirectory,
+                a.application_type AS ApplicationType, 
+                a.health_check_url AS HealthCheckUrl, 
+                a.health_check_interval AS HealthCheckInterval,
+                a.desired_instances AS DesiredInstances, 
+                a.min_instances AS MinInstances, 
+                a.max_instances AS MaxInstances,
+                a.port_requirements AS PortRequirementsJson, 
+                a.environment_variables AS EnvironmentVariablesJson, 
+                a.auto_start AS AutoStart,
+                a.created AS CreatedAt, 
+                a.updated AS UpdatedAt
+            FROM application a
+            INNER JOIN agent_application aa ON a.id = aa.application_id
+            WHERE aa.agent_id = @AgentId
+            ORDER BY a.name";
         
         var applications = await connection.QueryAsync<Application>(sql, new { AgentId = agentId });
         
@@ -247,18 +264,15 @@ public class AgentManager : IAgentManager
         
         return applications;
     }
-    
-    /// <summary>
-    /// Marks agents as offline if their heartbeat is older than 5 minutes.
-    /// </summary>
-    /// <param name="connection">The database connection.</param>
+
     private async Task MarkOfflineAgents(IDbConnection connection)
     {
         const string sql = @"
-            UPDATE Agents 
-            SET Status = 'Offline'
-            WHERE LastHeartbeat < DATEADD(MINUTE, -5, GETUTCDATE())
-            AND Status = 'Online'";
+            UPDATE agent 
+            SET status = 'offline',
+                updated = GETUTCDATE()
+            WHERE last_heartbeat < DATEADD(MINUTE, -5, GETUTCDATE())
+            AND status = 'online'";
         
         var offlineCount = await connection.ExecuteAsync(sql);
         
@@ -274,13 +288,17 @@ public class Agent
     public string Id { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public string IpAddress { get; set; } = string.Empty;
-    public string Status { get; set; } = "Offline"; // Online, Offline, Draining
+    public string Status { get; set; } = "offline"; // Online, Offline, Draining
     public int? TotalMemoryMB { get; set; }
     public int? AvailableMemoryMB { get; set; }
     public int? CpuCores { get; set; }
-    public string AvailablePorts { get; set; } = string.Empty; // JSON
+    public string OsVersion { get; set; } = string.Empty;
+    public string Tags { get; set; } = "[]"; // JSON, Renamed from AvailablePorts
     public DateTime? LastHeartbeat { get; set; }
-    public DateTime RegisteredAt { get; set; }
+    public DateTime Created { get; set; }
+    public DateTime? Updated { get; set; }
+    public long? CreatedBy { get; set; }
+    public long? UpdatedBy { get; set; }
 }
 
 public class AgentRegistration

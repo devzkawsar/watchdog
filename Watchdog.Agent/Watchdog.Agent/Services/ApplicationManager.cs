@@ -354,6 +354,153 @@ namespace Watchdog.Agent.Services
             
             // Save state
             await SaveState();
+            
+            // Discover and adopt any running instances
+            await DiscoverAndAdoptInstances();
+        }
+        
+        public async Task DiscoverAndAdoptInstances()
+        {
+            _logger.LogInformation("Starting process discovery for assigned applications...");
+            
+            var adoptedCount = 0;
+            
+            foreach (var app in _applications.Values)
+            {
+                try
+                {
+                    // Find all running processes matching this application
+                    var matchingProcesses = await DiscoverApplicationInstances(app);
+                    
+                    foreach (var (process, index) in matchingProcesses.Select((p, i) => (p, i)))
+                    {
+                        var instanceId = $"{app.Id}-adopted-{process.Id}";
+                        
+                        // Check if we already manage this instance
+                        if (_instances.ContainsKey(instanceId))
+                        {
+                            _logger.LogDebug("Process {Pid} already managed as {InstanceId}", 
+                                process.Id, instanceId);
+                            continue;
+                        }
+                        
+                        // Create managed application for discovered process
+                        var managedApp = new ManagedApplication
+                        {
+                            InstanceId = instanceId,
+                            ApplicationId = app.Id,
+                            ProcessId = process.Id,
+                            Status = ApplicationStatus.Running,
+                            CreatedAt = DateTime.UtcNow,
+                            StartedAt = process.StartTime,
+                            LastHealthCheck = DateTime.UtcNow,
+                            RestartCount = 0,
+                            StopReported = false,
+                            Command = new SpawnCommand
+                            {
+                                ApplicationId = app.Id,
+                                InstanceId = instanceId,
+                                ExecutablePath = app.ExecutablePath,
+                                Arguments = app.Arguments ?? string.Empty,
+                                WorkingDirectory = app.WorkingDirectory ?? string.Empty,
+                                InstanceIndex = index,
+                                HealthCheckUrl = app.HealthCheckUrl,
+                                HealthCheckInterval = app.HealthCheckInterval
+                            }
+                        };
+                        
+                        // Add environment variables from app config
+                        if (app.EnvironmentVariables != null)
+                        {
+                            foreach (var kvp in app.EnvironmentVariables)
+                            {
+                                managedApp.Command.EnvironmentVariables[kvp.Key] = kvp.Value;
+                            }
+                        }
+                        
+                        // Add to our tracking
+                        _instances[instanceId] = managedApp;
+                        adoptedCount++;
+                        
+                        _logger.LogInformation(
+                            "Discovered and adopted running instance: {AppName} (PID: {Pid}, InstanceId: {InstanceId})",
+                            app.Name, process.Id, instanceId);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to discover instances for application {AppId}", app.Id);
+                }
+            }
+            
+            if (adoptedCount > 0)
+            {
+                await SaveState();
+                _logger.LogInformation("Process discovery complete. Adopted {Count} instances", adoptedCount);
+            }
+            else
+            {
+                _logger.LogInformation("Process discovery complete. No new instances to adopt");
+            }
+        }
+        
+        private async Task<List<Process>> DiscoverApplicationInstances(ApplicationConfig app)
+        {
+            var discovered = new List<Process>();
+            
+            if (string.IsNullOrWhiteSpace(app.ExecutablePath))
+            {
+                return discovered;
+            }
+            
+            try
+            {
+                var fileName = Path.GetFileNameWithoutExtension(app.ExecutablePath);
+                var processes = Process.GetProcessesByName(fileName);
+                
+                _logger.LogDebug("Found {Count} processes named '{Name}'", processes.Length, fileName);
+                
+                var fullExecutablePath = Path.GetFullPath(app.ExecutablePath);
+                
+                foreach (var process in processes)
+                {
+                    try
+                    {
+                        // Check if already managed
+                        var alreadyManaged = _instances.Values.Any(i => 
+                            i.ProcessId.HasValue && i.ProcessId.Value == process.Id);
+                        
+                        if (alreadyManaged)
+                        {
+                            _logger.LogDebug("Process {Pid} is already managed, skipping", process.Id);
+                            continue;
+                        }
+                        
+                        // Match by executable path
+                        if (process.MainModule != null &&
+                            string.Equals(
+                                Path.GetFullPath(process.MainModule.FileName),
+                                fullExecutablePath,
+                                StringComparison.OrdinalIgnoreCase))
+                        {
+                            _logger.LogDebug("Process {Pid} matches executable path: {Path}", 
+                                process.Id, fullExecutablePath);
+                            discovered.Add(process);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        // Ignore processes we can't access (permissions, 32/64-bit mismatch, etc.)
+                        _logger.LogTrace(ex, "Cannot access process {Pid}", process.Id);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Error discovering instances for {AppId}", app.Id);
+            }
+            
+            return discovered;
         }
         
         public Task<bool> ShouldRestartInstance(ManagedApplication instance)

@@ -99,7 +99,8 @@ public class AgentGrpcService : IAgentGrpcService
                             Protocol = p.Protocol
                         }) },
                         HealthCheckUrl = spawnParams.HealthCheckUrl,
-                        HealthCheckInterval = spawnParams.HealthCheckInterval
+                        HealthCheckInterval = spawnParams.HealthCheckInterval,
+                        InstanceIndex = spawnParams.InstanceIndex
                     };
                 }
                 break;

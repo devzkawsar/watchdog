@@ -1,521 +1,342 @@
-
 -- =============================================
--- 1. APPLICATIONS TABLE (Desired State)
+-- 1. AGENTS TABLE (Worker Nodes)
 -- =============================================
-CREATE TABLE [Applications] (
-    [Id] VARCHAR(50) NOT NULL PRIMARY KEY,
-    [Name] VARCHAR(100) NOT NULL,
-    [DisplayName] VARCHAR(200),
-    [Description] VARCHAR(500),
+CREATE TABLE agent (
+    id VARCHAR(50) NOT NULL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    display_name VARCHAR(200),
 
-    -- Application Configuration
-    [ExecutablePath] VARCHAR(500) NOT NULL,
-    [Arguments] VARCHAR(1000),
-    [WorkingDirectory] VARCHAR(500),
-    [ApplicationType] INT NOT NULL DEFAULT 0, -- 0=Console, 1=Windows Service, 2=IIS
+    ip_address VARCHAR(45) NOT NULL,
+    hostname VARCHAR(255),
 
--- Health Check Configuration
-    [HealthCheckUrl] VARCHAR(500),
-    [HealthCheckInterval] INT DEFAULT 30, -- Seconds
-    [StartupTimeout] INT DEFAULT 180, -- Seconds
-    [HeartbeatTimeout] INT DEFAULT 120, -- Seconds
+    total_memory_mb BIGINT,
+    available_memory_mb BIGINT,
+    cpu_cores INT,
+    cpu_model VARCHAR(100),
+    total_disk_gb BIGINT,
+    available_disk_gb BIGINT,
+    os_version VARCHAR(100),
+    dot_net_version VARCHAR(50),
 
--- Scaling Configuration
-    [DesiredInstances] INT DEFAULT 1,
-    [MinInstances] INT DEFAULT 1,
-    [MaxInstances] INT DEFAULT 5,
+    status VARCHAR(20) DEFAULT 'offline',
+    last_heartbeat DATETIME2,
 
-    -- Port Requirements (JSON)
-    [PortRequirements] VARCHAR(MAX) DEFAULT '[]',
+    max_concurrent_processes INT DEFAULT 100,
+    current_process_count INT DEFAULT 0,
+    total_spawned_processes INT DEFAULT 0,
+    total_failed_spawns INT DEFAULT 0,
+    tags VARCHAR(MAX) DEFAULT '[]',
 
-    -- Environment Variables (JSON)
-    [EnvironmentVariables] VARCHAR(MAX) DEFAULT '{}',
+    created DATETIME2 DEFAULT GETUTCDATE(),
+    updated DATETIME2 NULL,
+    created_by BIGINT NULL,
+    updated_by BIGINT NULL,
 
-    -- Behavior Configuration
-    [AutoStart] BIT DEFAULT 1,
-    [MaxRestartAttempts] INT DEFAULT 3,
-    [RestartDelaySeconds] INT DEFAULT 10,
-    [StopTimeoutSeconds] INT DEFAULT 30,
-
-    -- Metadata
-    [CreatedAt] DATETIME2 DEFAULT GETUTCDATE(),
-    [UpdatedAt] DATETIME2 DEFAULT GETUTCDATE(),
-    [CreatedBy] VARCHAR(100),
-    [UpdatedBy] VARCHAR(100),
-
-    -- Status
-    [Status] INT DEFAULT 0, -- 0=Inactive, 1=Active, 2=Paused, 3=Error
-
--- Constraints
-    CONSTRAINT [CK_Applications_DesiredInstances]
-    CHECK ([DesiredInstances] >= 0),
-    CONSTRAINT [CK_Applications_MinInstances]
-    CHECK ([MinInstances] >= 0),
-    CONSTRAINT [CK_Applications_MaxInstances]
-    CHECK ([MaxInstances] >= [MinInstances]),
-    CONSTRAINT [CK_Applications_HealthCheckInterval]
-    CHECK ([HealthCheckInterval] BETWEEN 5 AND 300)
-    );
+    CONSTRAINT ck_agents_status
+        CHECK (status IN ('offline', 'online', 'draining', 'maintenance'))
+);
 
 
 -- =============================================
--- 2. AGENTS TABLE (Worker Nodes)
+-- 2. APPLICATIONS TABLE (Desired State)
 -- =============================================
-CREATE TABLE [Agents] (
-    [Id] VARCHAR(50) NOT NULL PRIMARY KEY,
-    [Name] VARCHAR(100) NOT NULL,
-    [DisplayName] VARCHAR(200),
+CREATE TABLE application (
+    id VARCHAR(50) NOT NULL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    display_name VARCHAR(200),
+    description VARCHAR(500),
+    
+    executable_path VARCHAR(500) NOT NULL,
+    arguments VARCHAR(1000),
+    working_directory VARCHAR(500),
+    application_type INT NOT NULL DEFAULT 0,
+    
+    health_check_url VARCHAR(500),
+    health_check_interval INT DEFAULT 30,
+    startup_timeout INT DEFAULT 180,
+    heartbeat_timeout INT DEFAULT 120,
+    
+    desired_instances INT DEFAULT 1,
+    min_instances INT DEFAULT 1,
+    max_instances INT DEFAULT 5,
+    
+    port_requirements VARCHAR(MAX) DEFAULT '[]',
+    environment_variables VARCHAR(MAX) DEFAULT '{}',
 
-    -- Network Information
-    [IpAddress] VARCHAR(45) NOT NULL,
-    [Hostname] VARCHAR(255),
-    [FQDN] VARCHAR(255),
+    auto_start BIT DEFAULT 1,
+    max_restart_attempts INT DEFAULT 3,
+    restart_delay_seconds INT DEFAULT 10,
+    stop_timeout_seconds INT DEFAULT 30,
 
-    -- System Resources
-    [TotalMemoryMB] BIGINT,
-    [AvailableMemoryMB] BIGINT,
-    [CpuCores] INT,
-    [CpuModel] VARCHAR(100),
-    [TotalDiskGB] BIGINT,
-    [AvailableDiskGB] BIGINT,
-    [OsVersion] VARCHAR(100),
-    [DotNetVersion] VARCHAR(50),
+    created DATETIME2 DEFAULT GETUTCDATE(),
+    updated DATETIME2 NULL,
+    created_by BIGINT NULL,
+    updated_by BIGINT NULL,
 
-    -- Port Management (JSON array of available ports)
-    [AvailablePorts] VARCHAR(MAX) DEFAULT '[]',
-    [PortRangeStart] INT DEFAULT 30000,
-    [PortRangeEnd] INT DEFAULT 40000,
+    status INT DEFAULT 0,
 
-    -- Status
-    [Status] VARCHAR(20) DEFAULT 'Offline', -- Offline, Online, Draining, Maintenance
-    [LastHeartbeat] DATETIME2,
-    [UptimeSeconds] BIGINT DEFAULT 0,
+    CONSTRAINT ck_applications_desired_instances CHECK (desired_instances >= 0),
+    CONSTRAINT ck_applications_min_instances CHECK (min_instances >= 0),
+    CONSTRAINT ck_applications_max_instances CHECK (max_instances >= min_instances),
+    CONSTRAINT ck_applications_health_check_interval CHECK (health_check_interval BETWEEN 5 AND 300),
 
-    -- Capacity Tracking
-    [MaxConcurrentProcesses] INT DEFAULT 100,
-    [CurrentProcessCount] INT DEFAULT 0,
-    [TotalSpawnedProcesses] INT DEFAULT 0,
-    [TotalFailedSpawns] INT DEFAULT 0,
-
-    -- Metadata
-    [RegisteredAt] DATETIME2 DEFAULT GETUTCDATE(),
-    [LastSeenAt] DATETIME2,
-    [Tags] VARCHAR(MAX) DEFAULT '[]', -- JSON array of tags
-
--- Constraints
-    CONSTRAINT [CK_Agents_Status]
-    CHECK ([Status] IN ('Offline', 'Online', 'Draining', 'Maintenance'))
-    );
-
+);
 
 -- =============================================
 -- 3. APPLICATION INSTANCES TABLE (Actual State)
 -- =============================================
-CREATE TABLE [ApplicationInstances] (
-    [InstanceId] VARCHAR(100) NOT NULL PRIMARY KEY,
-    [ApplicationId] VARCHAR(50) NOT NULL,
-    [AgentId] VARCHAR(50) NULL,
-
-    -- Process Information
-    [ProcessId] INT,
-    [ProcessName] VARCHAR(255),
-    [CommandLine] VARCHAR(1000),
-
-    -- Status
-    [Status] VARCHAR(20) DEFAULT 'Pending', -- Pending, Starting, Running, Stopping, Stopped, Error
-    [ExitCode] INT,
-    [ExitReason] VARCHAR(500),
-
-    -- Resource Usage
-    [CpuPercent] DECIMAL(5,2),
-    [MemoryMB] DECIMAL(10,2),
-    [MemoryPercent] DECIMAL(5,2),
-    [ThreadCount] INT,
-    [HandleCount] INT,
-
-    -- Port Assignments (JSON)
-    [AssignedPorts] VARCHAR(MAX),
-
-    -- Timing
-    [StartedAt] DATETIME2,
-    [StoppedAt] DATETIME2,
-    [LastHeartbeat] DATETIME2,
-    [LastHealthCheck] DATETIME2,
-
-    -- Lifecycle
-    [IsReady] BIT DEFAULT 0,
-    [ReadyAt] DATETIME2,
-
-    -- Restart Tracking
-    [RestartCount] INT DEFAULT 0,
-    [LastRestartAttempt] DATETIME2,
-    [AutoRestartEnabled] BIT DEFAULT 1,
-
-    -- Error Tracking
-    [LastError] VARCHAR(1000),
-    [ErrorCount] INT DEFAULT 0,
-
-    -- Metadata
-    [CreatedAt] DATETIME2 DEFAULT GETUTCDATE(),
-    [UpdatedAt] DATETIME2 DEFAULT GETUTCDATE(),
-
-    -- Foreign Keys
-    FOREIGN KEY ([ApplicationId]) REFERENCES [Applications]([Id]),
-    FOREIGN KEY ([AgentId]) REFERENCES [Agents]([Id]),
-
-    -- Constraints
-    CONSTRAINT [CK_ApplicationInstances_Status]
-    CHECK ([Status] IN ('Pending', 'Starting', 'Running', 'Stopping', 'Stopped', 'Error'))
-    );
+CREATE TABLE application_instance (
+    instance_id VARCHAR(100) NOT NULL PRIMARY KEY,
+    application_id VARCHAR(50) NOT NULL,
+    agent_id VARCHAR(50) NULL,
+    
+    process_id INT,
+    process_name VARCHAR(255),
+    command_line VARCHAR(1000),
+    
+    status VARCHAR(20) DEFAULT 'pending',
+    exit_code INT,
+    exit_reason VARCHAR(500),
+    
+    cpu_percent DECIMAL(5,2),
+    memory_mb DECIMAL(10,2),
+    memory_percent DECIMAL(5,2),
+    thread_count INT,
+    handle_count INT,
+    
+    assigned_port INT,
+    
+    started_at DATETIME2,
+    stopped_at DATETIME2,
+    last_heartbeat DATETIME2,
+    last_health_check DATETIME2,
+    
+    is_ready BIT DEFAULT 0,
+    ready_at DATETIME2,
+    
+    restart_count INT DEFAULT 0,
+    last_restart_attempt DATETIME2,
+    auto_restart_enabled BIT DEFAULT 1,
+    
+    last_error VARCHAR(1000),
+    error_count INT DEFAULT 0,
+    
+    created_at DATETIME2 DEFAULT GETUTCDATE(),
+    updated_at DATETIME2 DEFAULT GETUTCDATE(),
+    
+    CONSTRAINT fk_app_instances_application
+       FOREIGN KEY (application_id) REFERENCES application(id),
+    CONSTRAINT fk_app_instances_agent
+       FOREIGN KEY (agent_id) REFERENCES agent(id),
+    
+    CONSTRAINT ck_app_instances_status
+       CHECK (status IN ('pending','starting','running','stopping','stopped','error'))
+);
 
 
 -- =============================================
 -- 4. AGENT APPLICATIONS TABLE (Assignment)
 -- =============================================
-CREATE TABLE [AgentApplications] (
-    [AgentId] VARCHAR(50) NOT NULL,
-    [ApplicationId] VARCHAR(50) NOT NULL,
-
-    -- Assignment Configuration
-    [MaxInstancesOnAgent] INT DEFAULT 10,
-    [CurrentInstancesOnAgent] INT DEFAULT 0,
-    [Priority] INT DEFAULT 0, -- Lower number = higher priority
-
--- Scheduling Preferences
-    [PreferThisAgent] BIT DEFAULT 0,
-    [AvoidThisAgent] BIT DEFAULT 0,
-
-    -- Metadata
-    [AssignedAt] DATETIME2 DEFAULT GETUTCDATE(),
-    [AssignedBy] VARCHAR(100),
-    [LastAssignedInstance] DATETIME2,
-
-    -- Composite Primary Key
-    PRIMARY KEY ([AgentId], [ApplicationId]),
-
-    -- Foreign Keys
-    FOREIGN KEY ([AgentId]) REFERENCES [Agents]([Id]),
-    FOREIGN KEY ([ApplicationId]) REFERENCES [Applications]([Id])
-    );
-
+CREATE TABLE agent_application (
+    agent_id VARCHAR(50) NOT NULL,
+    application_id VARCHAR(50) NOT NULL,
+    
+    max_instances_on_agent INT DEFAULT 10,
+    current_instances_on_agent INT DEFAULT 0,
+    priority INT DEFAULT 0,
+    
+    prefer_this_agent BIT DEFAULT 0,
+    avoid_this_agent BIT DEFAULT 0,
+    
+    assigned_at DATETIME2 DEFAULT GETUTCDATE(),
+    assigned_by VARCHAR(100),
+    last_assigned_instance DATETIME2,
+    
+    PRIMARY KEY (agent_id, application_id),
+    
+    CONSTRAINT fk_agent_apps_agent
+        FOREIGN KEY (agent_id) REFERENCES agent(id),
+    CONSTRAINT fk_agent_apps_application
+        FOREIGN KEY (application_id) REFERENCES application(id)
+);
 -- =============================================
--- 5. COMMAND QUEUE TABLE (Orchestration Commands)
+-- 5. HEARTBEATS TABLE (Health Monitoring)
 -- =============================================
-CREATE TABLE [CommandQueue] (
-    [Id] BIGINT IDENTITY(1,1) PRIMARY KEY,
-    [CommandId] VARCHAR(50) NOT NULL UNIQUE,
+CREATE TABLE heartbeat (
+    id BIGINT IDENTITY(1,1) PRIMARY KEY,
 
-    -- Command Details
-    [CommandType] VARCHAR(20) NOT NULL, -- SPAWN, KILL, RESTART, UPDATE, STOP_ALL
-    [AgentId] VARCHAR(50) NOT NULL,
-    [ApplicationId] VARCHAR(50),
-    [InstanceId] VARCHAR(100),
+    agent_id VARCHAR(50),
+    instance_id VARCHAR(100),
+    application_id VARCHAR(50),
 
-    -- Command Parameters (JSON)
-    [Parameters] VARCHAR(MAX),
+    heartbeat_type VARCHAR(20) NOT NULL,
+    is_healthy BIT DEFAULT 1,
+    metrics VARCHAR(MAX),
 
-    -- Status Tracking
-    [Status] VARCHAR(20) DEFAULT 'Pending', -- Pending, Sent, Executing, Completed, Failed, Cancelled
-    [Priority] INT DEFAULT 0, -- 0=Normal, 1=High, 2=Critical
+    response_time_ms INT,
+    status_code INT,
+    status_message VARCHAR(500),
 
--- Timing
-    [CreatedAt] DATETIME2 DEFAULT GETUTCDATE(),
-    [ScheduledFor] DATETIME2,
-    [SentAt] DATETIME2,
-    [StartedAt] DATETIME2,
-    [CompletedAt] DATETIME2,
+    timestamp DATETIME2 DEFAULT GETUTCDATE(),
+    received_at DATETIME2 DEFAULT GETUTCDATE(),
 
-    -- Execution Results
-    [Result] VARCHAR(MAX), -- JSON result
-    [ErrorMessage] VARCHAR(1000),
-    [ErrorStackTrace] VARCHAR(MAX),
+    CONSTRAINT fk_heartbeat_agent FOREIGN KEY (agent_id) REFERENCES agent(id),
+    CONSTRAINT fk_heartbeat_instance FOREIGN KEY (instance_id) REFERENCES application_instance(instance_id),
+    CONSTRAINT fk_heartbeat_application FOREIGN KEY (application_id) REFERENCES application(id),
 
-    -- Retry Tracking
-    [RetryCount] INT DEFAULT 0,
-    [MaxRetries] INT DEFAULT 3,
-    [NextRetryAt] DATETIME2,
-
-    -- Foreign Keys
-    FOREIGN KEY ([AgentId]) REFERENCES [Agents]([Id]),
-    FOREIGN KEY ([ApplicationId]) REFERENCES [Applications]([Id]),
-
-    -- Constraints
-    CONSTRAINT [CK_CommandQueue_CommandType]
-    CHECK ([CommandType] IN ('SPAWN', 'KILL', 'RESTART', 'UPDATE', 'STOP_ALL')),
-    CONSTRAINT [CK_CommandQueue_Status]
-    CHECK ([Status] IN ('Pending', 'Sent', 'Executing', 'Completed', 'Failed', 'Cancelled'))
-    );
+    CONSTRAINT ck_heartbeat_type
+        CHECK (heartbeat_type IN ('agent','instance','custom'))
+);
 
 
 -- =============================================
--- 6. HEARTBEATS TABLE (Health Monitoring)
+-- 6. COMMAND QUEUE
 -- =============================================
-CREATE TABLE [Heartbeats] (
-    [Id] BIGINT IDENTITY(1,1) PRIMARY KEY,
-
-    -- Source Identification
-    [AgentId] VARCHAR(50),
-    [InstanceId] VARCHAR(100),
-    [ApplicationId] VARCHAR(50),
-
-    -- Heartbeat Data
-    [HeartbeatType] VARCHAR(20) NOT NULL, -- Agent, Instance, Custom
-    [IsHealthy] BIT DEFAULT 1,
-    [Metrics] VARCHAR(MAX), -- JSON metrics
-
--- Response Data
-    [ResponseTimeMs] INT,
-    [StatusCode] INT,
-    [StatusMessage] VARCHAR(500),
-
-    -- Timing
-    [Timestamp] DATETIME2 DEFAULT GETUTCDATE(),
-    [ReceivedAt] DATETIME2 DEFAULT GETUTCDATE(),
-
-    -- Foreign Keys
-    FOREIGN KEY ([AgentId]) REFERENCES [Agents]([Id]),
-    FOREIGN KEY ([InstanceId]) REFERENCES [ApplicationInstances]([InstanceId]),
-    FOREIGN KEY ([ApplicationId]) REFERENCES [Applications]([Id]),
-
-    -- Constraints
-    CONSTRAINT [CK_Heartbeats_HeartbeatType]
-    CHECK ([HeartbeatType] IN ('Agent', 'Instance', 'Custom'))
-    );
-
--- =============================================
--- 7. METRICS HISTORY TABLE (Performance Data)
--- =============================================
-CREATE TABLE [MetricsHistory] (
-    [Id] BIGINT IDENTITY(1,1) PRIMARY KEY,
-
-    -- Source Identification
-    [AgentId] VARCHAR(50),
-    [InstanceId] VARCHAR(100),
-
-    -- System Metrics
-    [CpuPercent] DECIMAL(5,2),
-    [MemoryMB] DECIMAL(10,2),
-    [MemoryPercent] DECIMAL(5,2),
-    [DiskUsagePercent] DECIMAL(5,2),
-    [NetworkBytesSent] BIGINT,
-    [NetworkBytesReceived] BIGINT,
-
-    -- Application Metrics
-    [ThreadCount] INT,
-    [HandleCount] INT,
-    [IoReadBytes] BIGINT,
-    [IoWriteBytes] BIGINT,
-    [PrivateBytes] BIGINT,
-    [WorkingSet] BIGINT,
-
-    -- Process Metrics
-    [UpTimeSeconds] INT,
-    [UserProcessorTime] INT,
-    [PrivilegedProcessorTime] INT,
-
-    -- Collection Metadata
-    [CollectionInterval] INT DEFAULT 10, -- Seconds
-    [Timestamp] DATETIME2 DEFAULT GETUTCDATE(),
-
-    -- Foreign Keys
-    FOREIGN KEY ([AgentId]) REFERENCES [Agents]([Id]),
-    FOREIGN KEY ([InstanceId]) REFERENCES [ApplicationInstances]([InstanceId])
-    );
-
+CREATE TABLE command_queue (
+    id BIGINT IDENTITY(1,1) PRIMARY KEY,
+    command_id VARCHAR(50) NOT NULL UNIQUE,
+    
+    command_type VARCHAR(20) NOT NULL,
+    agent_id VARCHAR(50) NOT NULL,
+    application_id VARCHAR(50),
+    instance_id VARCHAR(100),
+    
+    parameters VARCHAR(MAX),
+    
+    status VARCHAR(20) DEFAULT 'pending',
+    priority INT DEFAULT 0,
+    
+    created_at DATETIME2 DEFAULT GETUTCDATE(),
+    scheduled_for DATETIME2,
+    sent_at DATETIME2,
+    started_at DATETIME2,
+    completed_at DATETIME2,
+    
+    result VARCHAR(MAX),
+    error_message VARCHAR(1000),
+    error_stack_trace VARCHAR(MAX),
+    
+    retry_count INT DEFAULT 0,
+    max_retries INT DEFAULT 3,
+    next_retry_at DATETIME2,
+    
+    CONSTRAINT fk_command_agent FOREIGN KEY (agent_id) REFERENCES agent(id),
+    CONSTRAINT fk_command_application FOREIGN KEY (application_id) REFERENCES application(id),
+    
+    CONSTRAINT ck_command_type
+    CHECK (command_type IN ('spawn','kill','restart','update','stop_all')),
+    CONSTRAINT ck_command_status
+    CHECK (status IN ('pending','sent','executing','completed','failed','cancelled'))
+);
 
 -- =============================================
--- 8. EVENTS LOG TABLE (Audit Trail)
+-- 6. METRICS HISTORY TABLE (Performance Data)
 -- =============================================
-CREATE TABLE [EventsLog] (
-    [Id] BIGINT IDENTITY(1,1) PRIMARY KEY,
-
-    -- Event Details
-    [EventType] VARCHAR(50) NOT NULL,
-    [EventLevel] VARCHAR(20) DEFAULT 'Information', -- Debug, Information, Warning, Error, Critical
-    [EventSource] VARCHAR(100),
-
-    -- Entity References
-    [AgentId] VARCHAR(50),
-    [ApplicationId] VARCHAR(50),
-    [InstanceId] VARCHAR(100),
-    [CommandId] VARCHAR(50),
-
-    -- Event Data
-    [Message] VARCHAR(1000) NOT NULL,
-    [Details] VARCHAR(MAX), -- JSON details
-    [CorrelationId] VARCHAR(50),
-
-    -- User Context
-    [UserId] VARCHAR(100),
-    [UserName] VARCHAR(100),
-    [UserIp] VARCHAR(45),
-
-    -- Timing
-    [Timestamp] DATETIME2 DEFAULT GETUTCDATE(),
-
-    -- Foreign Keys
-    FOREIGN KEY ([AgentId]) REFERENCES [Agents]([Id]),
-    FOREIGN KEY ([ApplicationId]) REFERENCES [Applications]([Id]),
-    FOREIGN KEY ([InstanceId]) REFERENCES [ApplicationInstances]([InstanceId]),
-
-    -- Constraints
-    CONSTRAINT [CK_EventsLog_EventLevel]
-    CHECK ([EventLevel] IN ('Debug', 'Information', 'Warning', 'Error', 'Critical'))
-    );
-
+CREATE TABLE metrics_history (
+     id BIGINT IDENTITY(1,1) PRIMARY KEY,
+    
+     agent_id VARCHAR(50),
+     instance_id VARCHAR(100),
+    
+     cpu_percent DECIMAL(5,2),
+     memory_mb DECIMAL(10,2),
+     memory_percent DECIMAL(5,2),
+     disk_usage_percent DECIMAL(5,2),
+     network_bytes_sent BIGINT,
+     network_bytes_received BIGINT,
+    
+     thread_count INT,
+     handle_count INT,
+     io_read_bytes BIGINT,
+     io_write_bytes BIGINT,
+     private_bytes BIGINT,
+     working_set BIGINT,
+    
+     uptime_seconds INT,
+     user_processor_time INT,
+     privileged_processor_time INT,
+    
+     collection_interval INT DEFAULT 10,
+     timestamp DATETIME2 DEFAULT GETUTCDATE(),
+    
+     CONSTRAINT fk_metrics_agent FOREIGN KEY (agent_id) REFERENCES agent(id),
+     CONSTRAINT fk_metrics_instance FOREIGN KEY (instance_id) REFERENCES application_instance(instance_id)
+);
 
 -- =============================================
--- 9. CONFIGURATION TABLE (System Settings)
+-- 7. SCALING HISTORY TABLE (Auto-scaling Events)
 -- =============================================
-CREATE TABLE [Configuration] (
-    [Id] INT IDENTITY(1,1) PRIMARY KEY,
+CREATE TABLE scaling_history (
+    id BIGINT IDENTITY(1,1) PRIMARY KEY,
 
-    -- Configuration Details
-    [Category] VARCHAR(50) NOT NULL, -- System, Agent, Application, Scaling, Network
-    [Key] VARCHAR(100) NOT NULL,
-    [Value] VARCHAR(MAX),
-    [DataType] VARCHAR(20) DEFAULT 'String', -- String, Int, Bool, Decimal, JSON
+    application_id VARCHAR(50) NOT NULL,
+    scaling_type VARCHAR(20) NOT NULL,
+    reason VARCHAR(500),
 
--- Versioning
-    [Version] INT DEFAULT 1,
-    [IsActive] BIT DEFAULT 1,
+    previous_instances INT NOT NULL,
+    target_instances INT NOT NULL,
+    actual_instances INT,
 
-    -- Metadata
-    [Description] VARCHAR(500),
-    [CreatedAt] DATETIME2 DEFAULT GETUTCDATE(),
-    [UpdatedAt] DATETIME2 DEFAULT GETUTCDATE(),
-    [CreatedBy] VARCHAR(100),
-    [UpdatedBy] VARCHAR(100),
+    trigger_source VARCHAR(50),
+    trigger_value VARCHAR(100),
 
-    -- Constraints
-    CONSTRAINT [UQ_Configuration_Category_Key] UNIQUE ([Category], [Key]),
-    CONSTRAINT [CK_Configuration_DataType]
-    CHECK ([DataType] IN ('String', 'Int', 'Bool', 'Decimal', 'JSON'))
-    );
+    avg_cpu_percent DECIMAL(5,2),
+    avg_memory_percent DECIMAL(5,2),
+    healthy_instances INT,
+    unhealthy_instances INT,
 
+    triggered_at DATETIME2 DEFAULT GETUTCDATE(),
+    completed_at DATETIME2,
 
--- =============================================
--- 10. SCALING HISTORY TABLE (Auto-scaling Events)
--- =============================================
-CREATE TABLE [ScalingHistory] (
-    [Id] BIGINT IDENTITY(1,1) PRIMARY KEY,
+    success BIT,
+    error_message VARCHAR(1000),
 
-    -- Scaling Details
-    [ApplicationId] VARCHAR(50) NOT NULL,
-    [ScalingType] VARCHAR(20) NOT NULL, -- ScaleUp, ScaleDown, Maintain
-    [Reason] VARCHAR(500),
+    CONSTRAINT fk_scaling_application
+        FOREIGN KEY (application_id) REFERENCES application(id),
 
-    -- Instance Counts
-    [PreviousInstances] INT NOT NULL,
-    [TargetInstances] INT NOT NULL,
-    [ActualInstances] INT,
+    CONSTRAINT ck_scaling_type
+        CHECK (scaling_type IN ('scaleup','scaledown','maintain'))
+);
 
-    -- Trigger Information
-    [TriggerSource] VARCHAR(50), -- Manual, CPU, Memory, Schedule, Health
-    [TriggerValue] VARCHAR(100),
-
-    -- Metrics at Time of Scaling
-    [AvgCpuPercent] DECIMAL(5,2),
-    [AvgMemoryPercent] DECIMAL(5,2),
-    [HealthyInstances] INT,
-    [UnhealthyInstances] INT,
-
-    -- Timing
-    [TriggeredAt] DATETIME2 DEFAULT GETUTCDATE(),
-    [CompletedAt] DATETIME2,
-
-    -- Result
-    [Success] BIT,
-    [ErrorMessage] VARCHAR(1000),
-
-    -- Foreign Key
-    FOREIGN KEY ([ApplicationId]) REFERENCES [Applications]([Id]),
-
-    -- Constraints
-    CONSTRAINT [CK_ScalingHistory_ScalingType]
-    CHECK ([ScalingType] IN ('ScaleUp', 'ScaleDown', 'Maintain'))
-    );
 
 -- =============================================
 -- INDEXES FOR PERFORMANCE
 -- =============================================
 
 -- Applications indexes
-CREATE INDEX [IX_Applications_Status] ON [Applications] ([Status]);
-CREATE INDEX [IX_Applications_AutoStart] ON [Applications] ([AutoStart]);
-CREATE INDEX [IX_Applications_UpdatedAt] ON [Applications] ([UpdatedAt]);
-
+CREATE INDEX ix_applications_status ON application (status);
+CREATE INDEX ix_applications_auto_start ON application (auto_start);
+CREATE INDEX ix_applications_updated ON application (updated);
 
 -- Agents indexes
-CREATE INDEX [IX_Agents_Status_LastHeartbeat] ON [Agents] ([Status], [LastHeartbeat]);
-CREATE INDEX [IX_Agents_IpAddress] ON [Agents] ([IpAddress]);
-CREATE INDEX [IX_Agents_RegisteredAt] ON [Agents] ([RegisteredAt]);
-
+CREATE INDEX ix_agents_status_last_heartbeat ON agent (status, last_heartbeat);
+CREATE INDEX ix_agents_ip_address ON agent (ip_address);
+CREATE INDEX ix_agents_created ON agent (created);
 
 -- ApplicationInstances indexes
-CREATE INDEX [IX_ApplicationInstances_ApplicationId] ON [ApplicationInstances] ([ApplicationId]);
-CREATE INDEX [IX_ApplicationInstances_AgentId] ON [ApplicationInstances] ([AgentId]);
-CREATE INDEX [IX_ApplicationInstances_Status] ON [ApplicationInstances] ([Status]);
-CREATE INDEX [IX_ApplicationInstances_LastHeartbeat] ON [ApplicationInstances] ([LastHeartbeat]);
-CREATE INDEX [IX_ApplicationInstances_StartedAt] ON [ApplicationInstances] ([StartedAt]);
-CREATE INDEX [IX_ApplicationInstances_AgentId_Status] ON [ApplicationInstances] ([AgentId], [Status]);
-
-
--- CommandQueue indexes
-CREATE INDEX [IX_CommandQueue_AgentId_Status] ON [CommandQueue] ([AgentId], [Status]);
-CREATE INDEX [IX_CommandQueue_Status_CreatedAt] ON [CommandQueue] ([Status], [CreatedAt]);
-CREATE INDEX [IX_CommandQueue_ScheduledFor] ON [CommandQueue] ([ScheduledFor]);
-CREATE INDEX [IX_CommandQueue_CommandId] ON [CommandQueue] ([CommandId]);
-CREATE INDEX [IX_CommandQueue_InstanceId] ON [CommandQueue] ([InstanceId]);
-
+CREATE INDEX ix_application_instances_application_id ON application_instance (application_id);
+CREATE INDEX ix_application_instances_agent_id ON application_instance (agent_id);
+CREATE INDEX ix_application_instances_status ON application_instance (status);
+CREATE INDEX ix_application_instances_last_heartbeat ON application_instance (last_heartbeat);
+CREATE INDEX ix_application_instances_agent_status ON application_instance (agent_id, status);
 
 -- Heartbeats indexes
-CREATE INDEX [IX_Heartbeats_AgentId_Timestamp] ON [Heartbeats] ([AgentId], [Timestamp]);
-CREATE INDEX [IX_Heartbeats_InstanceId_Timestamp] ON [Heartbeats] ([InstanceId], [Timestamp]);
-CREATE INDEX [IX_Heartbeats_Timestamp] ON [Heartbeats] ([Timestamp]);
+CREATE INDEX ix_heartbeats_agent_timestamp ON heartbeat (agent_id, timestamp);
+CREATE INDEX ix_heartbeats_instance_timestamp ON heartbeat (instance_id, timestamp);
+CREATE INDEX ix_heartbeats_timestamp ON heartbeat (timestamp);
+
+--COMMAND QUEUE INDEXES
+CREATE INDEX ix_command_queue_agent_status ON command_queue (agent_id, status);
+CREATE INDEX ix_command_queue_status_created_at ON command_queue (status, created_at);
+CREATE INDEX ix_command_queue_scheduled_for ON command_queue (scheduled_for);
+CREATE INDEX ix_command_queue_command_id ON command_queue (command_id);
+CREATE INDEX ix_command_queue_instance_id ON command_queue (instance_id);
 
 -- MetricsHistory indexes
-CREATE INDEX [IX_MetricsHistory_InstanceId_Timestamp] ON [MetricsHistory] ([InstanceId], [Timestamp]);
-CREATE INDEX [IX_MetricsHistory_AgentId_Timestamp] ON [MetricsHistory] ([AgentId], [Timestamp]);
-CREATE INDEX [IX_MetricsHistory_Timestamp] ON [MetricsHistory] ([Timestamp]);
-
-
--- EventsLog indexes
-CREATE INDEX [IX_EventsLog_Timestamp] ON [EventsLog] ([Timestamp]);
-CREATE INDEX [IX_EventsLog_EventType] ON [EventsLog] ([EventType]);
-CREATE INDEX [IX_EventsLog_EventLevel] ON [EventsLog] ([EventLevel]);
-CREATE INDEX [IX_EventsLog_AgentId] ON [EventsLog] ([AgentId]);
-CREATE INDEX [IX_EventsLog_CorrelationId] ON [EventsLog] ([CorrelationId]);
-
+CREATE INDEX ix_metrics_history_instance_timestamp ON metrics_history (instance_id, timestamp);
+CREATE INDEX ix_metrics_history_agent_timestamp ON metrics_history (agent_id, timestamp);
+CREATE INDEX ix_metrics_history_timestamp ON metrics_history (timestamp);
 
 -- ScalingHistory indexes
-CREATE INDEX [IX_ScalingHistory_ApplicationId] ON [ScalingHistory] ([ApplicationId]);
-CREATE INDEX [IX_ScalingHistory_TriggeredAt] ON [ScalingHistory] ([TriggeredAt]);
-
-
--- =============================================
--- INITIAL DATA (Configuration)
--- =============================================
-
--- Insert default configuration
-INSERT INTO [Configuration] ([Category], [Key], [Value], [DataType], [Description])
-VALUES
--- System Configuration
-    ('System', 'Watchdog.Version', '1.0.0', 'String', 'Watchdog system version'),
-    ('System', 'Cleanup.RetentionDays', '30', 'Int', 'Days to keep historical data'),
-    ('System', 'Cleanup.IntervalHours', '24', 'Int', 'Hours between cleanup runs'),
-
--- Agent Configuration
-    ('Agent', 'Heartbeat.IntervalSeconds', '30', 'Int', 'Seconds between agent heartbeats'),
-    ('Agent', 'Heartbeat.TimeoutMinutes', '5', 'Int', 'Minutes before marking agent offline'),
-    ('Agent', 'Registration.AutoApprove', 'true', 'Bool', 'Auto-approve new agent registrations'),
-    ('Agent', 'Port.RangeStart', '30000', 'Int', 'Start of dynamic port range'),
-    ('Agent', 'Port.RangeEnd', '40000', 'Int', 'End of dynamic port range'),
-
--- Scaling Configuration
-    ('Scaling', 'Check.IntervalSeconds', '60', 'Int', 'Seconds between scaling checks'),
-    ('Scaling', 'Cpu.ThresholdPercent', '80', 'Int', 'CPU threshold for scaling'),
-    ('Scaling', 'Memory.ThresholdPercent', '80', 'Int', 'Memory threshold for scaling'),
-    ('Scaling', 'HealthCheck.FailureThreshold', '3', 'Int', 'Failed health checks before scaling'),
-    ('Scaling', 'Cooldown.PeriodSeconds', '300', 'Int', 'Seconds to wait between scaling actions')
-
+CREATE INDEX ix_scaling_history_application_id ON scaling_history (application_id);
+CREATE INDEX ix_scaling_history_triggered_at ON scaling_history (triggered_at);

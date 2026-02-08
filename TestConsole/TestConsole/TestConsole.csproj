@@ -8,7 +8,7 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\..\..\PEP-Monitoring\PEPMonitoring.csproj" />
+        <ProjectReference Include="../../../PEPMonitoring/PEPMonitoring.csproj" />
     </ItemGroup>
 
 </Project>

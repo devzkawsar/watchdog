@@ -32,7 +32,7 @@ public class ApplicationMonitoringGrpcServiceImpl : ApplicationMonitoringService
     private static async Task EnsureApplicationExistsAsync(IDbConnection connection, string applicationId)
     {
         var exists = await connection.ExecuteScalarAsync<int>(
-            "SELECT COUNT(1) FROM Applications WHERE Id = @Id",
+            "SELECT COUNT(1) FROM application WHERE id = @Id",
             new { Id = applicationId });
 
         if (exists > 0)
@@ -41,16 +41,16 @@ public class ApplicationMonitoringGrpcServiceImpl : ApplicationMonitoringService
         }
 
         const string insertApplicationSql = @"
-            INSERT INTO Applications
-                (Id, Name, DisplayName, ExecutablePath, Arguments, WorkingDirectory,
-                 ApplicationType, HealthCheckUrl, HealthCheckInterval, HeartbeatTimeout,
-                 DesiredInstances, MinInstances, MaxInstances,
-                 PortRequirements, EnvironmentVariables, AutoStart)
+            INSERT INTO application
+                (id, name, display_name, executable_path, arguments, working_directory,
+                 application_type, health_check_url, health_check_interval, heartbeat_timeout,
+                 desired_instances, min_instances, max_instances,
+                 port_requirements, environment_variables, auto_start, created, created_by)
             VALUES
                 (@Id, @Name, @DisplayName, @ExecutablePath, '', '',
                  0, '', 30, 120,
                  0, 0, 0,
-                 '[]', '{}', 0)";
+                 '[]', '{}', 0, GETUTCDATE(), NULL)";
 
         await connection.ExecuteAsync(insertApplicationSql, new
         {
@@ -70,22 +70,22 @@ public class ApplicationMonitoringGrpcServiceImpl : ApplicationMonitoringService
             using var connection = _connectionFactory.CreateConnection();
 
             var exists = await connection.ExecuteScalarAsync<int>(
-                "SELECT COUNT(1) FROM Applications WHERE Id = @Id",
+                "SELECT COUNT(1) FROM application WHERE id = @Id",
                 new { Id = request.ApplicationId });
 
             if (exists <= 0)
             {
                 const string insertApplicationSql = @"
-                    INSERT INTO Applications
-                        (Id, Name, DisplayName, ExecutablePath, Arguments, WorkingDirectory,
-                         ApplicationType, HealthCheckUrl, HealthCheckInterval, HeartbeatTimeout,
-                         DesiredInstances, MinInstances, MaxInstances,
-                         PortRequirements, EnvironmentVariables, AutoStart)
+                    INSERT INTO application
+                        (id, name, display_name, executable_path, arguments, working_directory,
+                         application_type, health_check_url, health_check_interval, heartbeat_timeout,
+                         desired_instances, min_instances, max_instances,
+                         port_requirements, environment_variables, auto_start, created, created_by)
                     VALUES
-                        (@Id, @Name, @DisplayName, @ExecutablePath, '', '',
-                         0, '', @HealthCheckInterval, @HeartbeatTimeout,
+                        (@Id, @Name, @DisplayName, @ExecutablePath, @Arguments, '',
+                         @ApplicationType, '', @HealthCheckInterval, @HeartbeatTimeout,
                          0, 0, 0,
-                         '[]', '{}', 0)";
+                         '[]', '{}', 0, GETUTCDATE(), NULL)";
 
                 var heartbeatTimeout = Math.Max(30, request.ExpectedHeartbeatIntervalSeconds * 2);
                 var healthCheckInterval = Math.Max(5, request.ExpectedHeartbeatIntervalSeconds);
@@ -95,7 +95,9 @@ public class ApplicationMonitoringGrpcServiceImpl : ApplicationMonitoringService
                     Id = request.ApplicationId,
                     Name = request.ApplicationName,
                     DisplayName = request.ApplicationName,
-                    ExecutablePath = "",
+                    ExecutablePath = request.ExecutablePath ?? string.Empty,
+                    Arguments = request.Arguments ?? string.Empty,
+                    ApplicationType = request.ApplicationType,
                     HealthCheckInterval = healthCheckInterval,
                     HeartbeatTimeout = heartbeatTimeout
                 });
@@ -103,36 +105,43 @@ public class ApplicationMonitoringGrpcServiceImpl : ApplicationMonitoringService
             else
             {
                 const string updateApplicationSql = @"
-                    UPDATE Applications
-                    SET Name = @Name,
-                        DisplayName = @DisplayName,
-                        UpdatedAt = GETUTCDATE()
-                    WHERE Id = @Id";
+                    UPDATE application
+                    SET name = @Name,
+                        display_name = @DisplayName,
+                        executable_path = @ExecutablePath,
+                        arguments = @Arguments,
+                        application_type = @ApplicationType,
+                        updated = GETUTCDATE(),
+                        updated_by = NULL
+                    WHERE id = @Id";
 
                 await connection.ExecuteAsync(updateApplicationSql, new
                 {
                     Id = request.ApplicationId,
                     Name = request.ApplicationName,
-                    DisplayName = request.ApplicationName
+                    DisplayName = request.ApplicationName,
+                    ExecutablePath = request.ExecutablePath ?? string.Empty,
+                    Arguments = request.Arguments ?? string.Empty,
+                    ApplicationType = request.ApplicationType
                 });
             }
 
             const string upsertInstanceSql = @"
-                IF EXISTS (SELECT 1 FROM ApplicationInstances WHERE InstanceId = @InstanceId)
+                IF EXISTS (SELECT 1 FROM application_instance WHERE instance_id = @InstanceId)
                 BEGIN
-                    UPDATE ApplicationInstances
-                    SET ApplicationId = @ApplicationId,
-                        Status = 'Starting',
-                        LastHeartbeat = GETUTCDATE(),
-                        UpdatedAt = GETUTCDATE()
-                    WHERE InstanceId = @InstanceId
+                    UPDATE application_instance
+                    SET application_id = @ApplicationId,
+                        status = 'starting',
+                        last_heartbeat = GETUTCDATE(),
+                        updated_at = GETUTCDATE()
+                    WHERE instance_id = @InstanceId
                 END
                 ELSE
                 BEGIN
-                    INSERT INTO ApplicationInstances
-                        (InstanceId, ApplicationId, AgentId, Status, IsReady, CreatedAt, UpdatedAt, LastHeartbeat)
+                    INSERT INTO application_instance
+                        (instance_id, application_id, agent_id, status, is_ready, created_at, updated_at, last_heartbeat)
                     VALUES
-                        (@InstanceId, @ApplicationId, NULL, 'Starting', 0, GETUTCDATE(), GETUTCDATE(), GETUTCDATE())
+                        (@InstanceId, @ApplicationId, NULL, 'starting', 0, GETUTCDATE(), GETUTCDATE(), GETUTCDATE())
                 END";
 
             var instanceId = string.IsNullOrWhiteSpace(request.InstanceId)
@@ -145,20 +154,7 @@ public class ApplicationMonitoringGrpcServiceImpl : ApplicationMonitoringService
                 ApplicationId = request.ApplicationId
             });
 
-            const string sql = @"
-                INSERT INTO EventsLog (EventType, EventLevel, EventSource, ApplicationId, InstanceId, Message, Details, Timestamp)
-                VALUES (@EventType, @EventLevel, @EventSource, @ApplicationId, @InstanceId, @Message, @Details, GETUTCDATE())";
 
-            await connection.ExecuteAsync(sql, new
-            {
-                EventType = "ApplicationRegistered",
-                EventLevel = "Information",
-                EventSource = "ApplicationMonitoringService",
-                ApplicationId = request.ApplicationId,
-                Message = $"Application registered: {request.ApplicationName}",
-                InstanceId = instanceId,
-                Details = $"{{\"applicationId\":\"{request.ApplicationId}\",\"instanceId\":\"{instanceId}\",\"applicationName\":\"{request.ApplicationName}\",\"expectedHeartbeatIntervalSeconds\":{request.ExpectedHeartbeatIntervalSeconds},\"registeredAtUnixSeconds\":{request.RegisteredAtUnixSeconds}}}"
-            });
 
             return new ApplicationRegistrationResponse
             {
@@ -192,23 +188,25 @@ public class ApplicationMonitoringGrpcServiceImpl : ApplicationMonitoringService
                 : request.InstanceId;
 
             const string upsertInstanceSql = @"
-                IF EXISTS (SELECT 1 FROM ApplicationInstances WHERE InstanceId = @InstanceId)
+                IF EXISTS (SELECT 1 FROM application_instance WHERE instance_id = @InstanceId)
                 BEGIN
-                    UPDATE ApplicationInstances
-                    SET ApplicationId = @ApplicationId,
-                        IsReady = 1,
-                        ReadyAt = @ReadyAt,
-                        Status = 'Running',
-                        LastHeartbeat = GETUTCDATE(),
-                        UpdatedAt = GETUTCDATE()
-                    WHERE InstanceId = @InstanceId
+                    UPDATE application_instance
+                    SET application_id = @ApplicationId,
+                        is_ready = 1,
+                        ready_at = @ReadyAt,
+                        status = 'running',
+                        process_id = @ProcessId,
+                        assigned_port = @AssignedPort,
+                        last_heartbeat = GETUTCDATE(),
+                        updated_at = GETUTCDATE()
+                    WHERE instance_id = @InstanceId
                 END
                 ELSE
                 BEGIN
-                    INSERT INTO ApplicationInstances
-                        (InstanceId, ApplicationId, AgentId, Status, IsReady, ReadyAt, CreatedAt, UpdatedAt, LastHeartbeat)
+                    INSERT INTO application_instance
+                        (instance_id, application_id, agent_id, status, is_ready, ready_at, process_id, assigned_port, created_at, updated_at, last_heartbeat)
                     VALUES
-                        (@InstanceId, @ApplicationId, NULL, 'Running', 1, @ReadyAt, GETUTCDATE(), GETUTCDATE(), GETUTCDATE())
+                        (@InstanceId, @ApplicationId, NULL, 'running', 1, @ReadyAt, @ProcessId, @AssignedPort, GETUTCDATE(), GETUTCDATE(), GETUTCDATE())
                 END";
 
             var readyAt = ToUtcDateTimeFromUnixSeconds(request.TimestampUnixSeconds);
@@ -217,23 +215,12 @@ public class ApplicationMonitoringGrpcServiceImpl : ApplicationMonitoringService
             {
                 InstanceId = instanceId,
                 ApplicationId = request.ApplicationId,
-                ReadyAt = readyAt
+                ReadyAt = readyAt,
+                ProcessId = request.ProcessId > 0 ? (int?)request.ProcessId : null,
+                AssignedPort = request.AssignedPort > 0 ? (int?)request.AssignedPort : null
             });
 
-            const string sql = @"
-                INSERT INTO EventsLog (EventType, EventLevel, EventSource, ApplicationId, InstanceId, Message, Details, Timestamp)
-                VALUES (@EventType, @EventLevel, @EventSource, @ApplicationId, @InstanceId, @Message, @Details, GETUTCDATE())";
 
-            await connection.ExecuteAsync(sql, new
-            {
-                EventType = "ApplicationReady",
-                EventLevel = "Information",
-                EventSource = "ApplicationMonitoringService",
-                ApplicationId = request.ApplicationId,
-                InstanceId = instanceId,
-                Message = string.IsNullOrWhiteSpace(request.Message) ? "Ready" : request.Message,
-                Details = $"{{\"applicationId\":\"{request.ApplicationId}\",\"instanceId\":\"{instanceId}\",\"timestampUnixSeconds\":{request.TimestampUnixSeconds}}}"
-            });
 
             return new ApplicationReadyResponse
             {
@@ -267,21 +254,21 @@ public class ApplicationMonitoringGrpcServiceImpl : ApplicationMonitoringService
                 : request.InstanceId;
 
             const string upsertInstanceSql = @"
-                IF EXISTS (SELECT 1 FROM ApplicationInstances WHERE InstanceId = @InstanceId)
+                IF EXISTS (SELECT 1 FROM application_instance WHERE instance_id = @InstanceId)
                 BEGIN
-                    UPDATE ApplicationInstances
-                    SET ApplicationId = @ApplicationId,
-                        LastHeartbeat = GETUTCDATE(),
-                        Status = CASE WHEN IsReady = 1 THEN 'Running' ELSE 'Starting' END,
-                        UpdatedAt = GETUTCDATE()
-                    WHERE InstanceId = @InstanceId
+                    UPDATE application_instance
+                    SET application_id = @ApplicationId,
+                        last_heartbeat = GETUTCDATE(),
+                        status = CASE WHEN is_ready = 1 THEN 'running' ELSE 'starting' END,
+                        updated_at = GETUTCDATE()
+                    WHERE instance_id = @InstanceId
                 END
                 ELSE
                 BEGIN
-                    INSERT INTO ApplicationInstances
-                        (InstanceId, ApplicationId, AgentId, Status, IsReady, CreatedAt, UpdatedAt, LastHeartbeat)
+                    INSERT INTO application_instance
+                        (instance_id, application_id, agent_id, status, is_ready, created_at, updated_at, last_heartbeat)
                     VALUES
-                        (@InstanceId, @ApplicationId, NULL, 'Starting', 0, GETUTCDATE(), GETUTCDATE(), GETUTCDATE())
+                        (@InstanceId, @ApplicationId, NULL, 'starting', 0, GETUTCDATE(), GETUTCDATE(), GETUTCDATE())
                 END";
 
             await connection.ExecuteAsync(upsertInstanceSql, new
@@ -291,8 +278,8 @@ public class ApplicationMonitoringGrpcServiceImpl : ApplicationMonitoringService
             });
 
             const string sql = @"
-                INSERT INTO Heartbeats
-                    (AgentId, InstanceId, ApplicationId, HeartbeatType, IsHealthy, Metrics, ResponseTimeMs, StatusCode, StatusMessage, Timestamp, ReceivedAt)
+                INSERT INTO heartbeat
+                    (agent_id, instance_id, application_id, heartbeat_type, is_healthy, metrics, response_time_ms, status_code, status_message, timestamp, received_at)
                 VALUES
                     (NULL, @InstanceId, @ApplicationId, 'Instance', @IsHealthy, @Metrics, NULL, NULL, @StatusMessage, @Timestamp, GETUTCDATE())";
 
@@ -341,12 +328,12 @@ public class ApplicationMonitoringGrpcServiceImpl : ApplicationMonitoringService
                 : request.InstanceId;
 
             const string upsertInstanceSql = @"
-                IF NOT EXISTS (SELECT 1 FROM ApplicationInstances WHERE InstanceId = @InstanceId)
+                IF NOT EXISTS (SELECT 1 FROM application_instance WHERE instance_id = @InstanceId)
                 BEGIN
-                    INSERT INTO ApplicationInstances
-                        (InstanceId, ApplicationId, AgentId, Status, IsReady, CreatedAt, UpdatedAt, LastHeartbeat)
+                    INSERT INTO application_instance
+                        (instance_id, application_id, agent_id, status, is_ready, created_at, updated_at, last_heartbeat)
                     VALUES
-                        (@InstanceId, @ApplicationId, NULL, 'Starting', 0, GETUTCDATE(), GETUTCDATE(), GETUTCDATE())
+                        (@InstanceId, @ApplicationId, NULL, 'starting', 0, GETUTCDATE(), GETUTCDATE(), GETUTCDATE())
                 END";
 
             await connection.ExecuteAsync(upsertInstanceSql, new
@@ -356,18 +343,19 @@ public class ApplicationMonitoringGrpcServiceImpl : ApplicationMonitoringService
             });
 
             const string sql = @"
-                INSERT INTO EventsLog (EventType, EventLevel, EventSource, ApplicationId, InstanceId, Message, Details, Timestamp)
-                VALUES (@EventType, @EventLevel, @EventSource, @ApplicationId, @InstanceId, @Message, @Details, GETUTCDATE())";
+                INSERT INTO metrics_history (instance_id, application_id, metric_name, metric_value, details, recorded_at, created_at)
+                VALUES (@InstanceId, @ApplicationId, @MetricName, @MetricValue, @Details, @RecordedAt, GETUTCDATE())";
 
+            var recordedAt = ToUtcDateTimeFromUnixSeconds(request.RecordedAtUnixSeconds);
+            
             await connection.ExecuteAsync(sql, new
             {
-                EventType = "PerformanceMetric",
-                EventLevel = "Information",
-                EventSource = "ApplicationMonitoringService",
-                ApplicationId = request.ApplicationId,
                 InstanceId = instanceId,
-                Message = "Performance metric recorded",
-                Details = $"{{\"applicationId\":\"{request.ApplicationId}\",\"instanceId\":\"{instanceId}\",\"startTimeUnixSeconds\":{request.StartTimeUnixSeconds},\"endTimeUnixSeconds\":{request.EndTimeUnixSeconds},\"quantity\":{request.Quantity},\"delta\":{request.Delta},\"recordedAtUnixSeconds\":{request.RecordedAtUnixSeconds}}}"
+                ApplicationId = request.ApplicationId,
+                MetricName = "PerformanceMetric",
+                MetricValue = request.Quantity,
+                Details = $"{{\"startTimeUnixSeconds\":{request.StartTimeUnixSeconds},\"endTimeUnixSeconds\":{request.EndTimeUnixSeconds},\"quantity\":{request.Quantity},\"delta\":{request.Delta}}}",
+                RecordedAt = recordedAt
             });
 
             return new PerformanceMetricResponse

@@ -63,12 +63,12 @@ public class CommandService : ICommandService
         var command = new CommandQueueItem
         {
             CommandId = commandId,
-            CommandType = "SPAWN",
+            CommandType = "spawn",
             AgentId = agentId,
             ApplicationId = application.Id,
             InstanceId = instanceId,
             Parameters = JsonSerializer.Serialize(parameters),
-            Status = "Pending",
+            Status = "pending",
             CreatedAt = DateTime.UtcNow
         };
         
@@ -99,12 +99,12 @@ public class CommandService : ICommandService
         var command = new CommandQueueItem
         {
             CommandId = commandId,
-            CommandType = "KILL",
+            CommandType = "kill",
             AgentId = agentId,
             ApplicationId = applicationId,
             InstanceId = instanceId,
             Parameters = JsonSerializer.Serialize(parameters),
-            Status = "Pending",
+            Status = "pending",
             CreatedAt = DateTime.UtcNow
         };
         
@@ -134,12 +134,12 @@ public class CommandService : ICommandService
         var command = new CommandQueueItem
         {
             CommandId = commandId,
-            CommandType = "RESTART",
+            CommandType = "restart",
             AgentId = agentId,
             ApplicationId = applicationId,
             InstanceId = instanceId,
             Parameters = JsonSerializer.Serialize(parameters),
-            Status = "Pending",
+            Status = "pending",
             CreatedAt = DateTime.UtcNow
         };
         
@@ -161,13 +161,21 @@ public class CommandService : ICommandService
         
         const string sql = @"
             SELECT 
-                CommandId, CommandType, AgentId, ApplicationId, 
-                InstanceId, Parameters, Status, CreatedAt, 
-                SentAt, CompletedAt, ErrorMessage
-            FROM CommandQueue
-            WHERE AgentId = @AgentId 
-            AND Status = 'Pending'
-            ORDER BY CreatedAt ASC";
+                command_id AS CommandId, 
+                command_type AS CommandType, 
+                agent_id AS AgentId, 
+                application_id AS ApplicationId, 
+                instance_id AS InstanceId, 
+                parameters AS Parameters, 
+                status AS Status, 
+                created_at AS CreatedAt, 
+                sent_at AS SentAt, 
+                completed_at AS CompletedAt, 
+                error_message AS ErrorMessage
+            FROM command_queue
+            WHERE agent_id = @AgentId 
+            AND status = 'pending'
+            ORDER BY created_at ASC";
         
         return (await connection.QueryAsync<CommandQueueItem>(sql, new { AgentId = agentId })).ToList();
     }
@@ -177,10 +185,10 @@ public class CommandService : ICommandService
         using var connection = _connectionFactory.CreateConnection();
         
         const string sql = @"
-            UPDATE CommandQueue 
-            SET Status = 'Sent',
-                SentAt = GETUTCDATE()
-            WHERE CommandId = @CommandId";
+            UPDATE command_queue 
+            SET status = 'sent',
+                sent_at = GETUTCDATE()
+            WHERE command_id = @CommandId";
         
         var result = await connection.ExecuteAsync(sql, new { CommandId = commandId });
         return result > 0;
@@ -195,16 +203,16 @@ public class CommandService : ICommandService
         using var connection = _connectionFactory.CreateConnection();
         
         const string sql = @"
-            UPDATE CommandQueue 
-            SET Status = @Status,
-                CompletedAt = GETUTCDATE(),
-                ErrorMessage = @ErrorMessage
-            WHERE CommandId = @CommandId";
+            UPDATE command_queue 
+            SET status = @Status,
+                completed_at = GETUTCDATE(),
+                error_message = @ErrorMessage
+            WHERE command_id = @CommandId";
         
         var parameters = new
         {
             CommandId = commandId,
-            Status = success ? "Executed" : "Failed",
+            Status = success ? "executed" : "failed",
             ErrorMessage = error
         };
         
@@ -224,9 +232,9 @@ public class CommandService : ICommandService
         using var connection = _connectionFactory.CreateConnection();
         
         const string sql = @"
-            INSERT INTO CommandQueue 
-                (CommandId, CommandType, AgentId, ApplicationId, 
-                 InstanceId, Parameters, Status, CreatedAt)
+            INSERT INTO command_queue 
+                (command_id, command_type, agent_id, application_id, 
+                 instance_id, parameters, status, created_at)
             VALUES 
                 (@CommandId, @CommandType, @AgentId, @ApplicationId, 
                  @InstanceId, @Parameters, @Status, @CreatedAt)";
@@ -249,9 +257,9 @@ public class CommandService : ICommandService
         
         // Delete commands older than 7 days
         const string sql = @"
-            DELETE FROM CommandQueue 
-            WHERE CreatedAt < DATEADD(DAY, -7, GETUTCDATE())
-            AND Status IN ('Executed', 'Failed')";
+            DELETE FROM command_queue 
+            WHERE created_at < DATEADD(DAY, -7, GETUTCDATE())
+            AND status IN ('executed', 'failed')";
         
         var deletedCount = await connection.ExecuteAsync(sql);
         
@@ -303,14 +311,14 @@ public class CommandService : ICommandService
             using var connection = _connectionFactory.CreateConnection();
             
             const string getCommandSql = @"
-                SELECT ApplicationId, InstanceId, AgentId 
-                FROM CommandQueue 
-                WHERE CommandId = @CommandId";
+                SELECT application_id AS ApplicationId, instance_id AS InstanceId, agent_id AS AgentId 
+                FROM command_queue 
+                WHERE command_id = @CommandId";
             
             var command = await connection.QueryFirstOrDefaultAsync<CommandQueueItem>(getCommandSql, 
                 new { CommandId = commandId });
             
-            if (command != null && command.CommandType == "SPAWN")
+            if (command != null && command.CommandType == "spawn")
             {
                 // Parse result to get process ID and ports
                 var spawnResult = JsonSerializer.Deserialize<SpawnResult>(result);
@@ -318,20 +326,41 @@ public class CommandService : ICommandService
                 {
                     // Update ApplicationInstances table
                     const string updateInstanceSql = @"
-                        INSERT INTO ApplicationInstances 
-                            (InstanceId, ApplicationId, AgentId, ProcessId, Status, 
-                             AssignedPorts, StartedAt, CreatedAt)
-                        VALUES 
-                            (@InstanceId, @ApplicationId, @AgentId, @ProcessId, 'Running',
-                             @AssignedPorts, @StartedAt, GETUTCDATE())";
+                        IF EXISTS (SELECT 1 FROM application_instance WHERE instance_id = @InstanceId)
+                        BEGIN
+                            UPDATE application_instance 
+                            SET agent_id = @AgentId,
+                                process_id = @ProcessId,
+                                status = 'running',
+                                assigned_port = @AssignedPort,
+                                started_at = @StartedAt,
+                                updated_at = GETUTCDATE(),
+                                last_heartbeat = GETUTCDATE()
+                            WHERE instance_id = @InstanceId
+                        END
+                        ELSE
+                        BEGIN
+                            INSERT INTO application_instance 
+                                (instance_id, application_id, agent_id, process_id, status, 
+                                 assigned_port, started_at, created_at, updated_at, last_heartbeat)
+                            VALUES 
+                                (@InstanceId, @ApplicationId, @AgentId, @ProcessId, 'running',
+                                 @AssignedPort, @StartedAt, GETUTCDATE(), GETUTCDATE(), GETUTCDATE())
+                        END";
                     
+                    int assignedPort = 0;
+                    if (spawnResult.Ports != null && spawnResult.Ports.Count > 0)
+                    {
+                        assignedPort = spawnResult.Ports[0].ExternalPort;
+                    }
+
                     await connection.ExecuteAsync(updateInstanceSql, new
                     {
                         InstanceId = command.InstanceId,
                         ApplicationId = command.ApplicationId,
                         AgentId = command.AgentId,
                         ProcessId = spawnResult.ProcessId,
-                        AssignedPorts = JsonSerializer.Serialize(spawnResult.Ports),
+                        AssignedPort = assignedPort,
                         StartedAt = spawnResult.StartTime
                     });
                     
@@ -373,18 +402,30 @@ public class NetworkManager : INetworkManager
     {
         using var connection = _connectionFactory.CreateConnection();
         
-        // Get agent's available ports
+        // Get agent's available ports (using tags column as storage for now, or just empty)
+        // Note: New schema removed AvailablePorts. We will use tags to store it if needed or just generate.
         const string getPortsSql = @"
-            SELECT AvailablePorts FROM Agents WHERE Id = @AgentId";
+            SELECT tags FROM agent WHERE id = @AgentId";
         
         var portsJson = await connection.ExecuteScalarAsync<string>(getPortsSql, new { AgentId = agentId });
-        var availablePorts = JsonSerializer.Deserialize<List<int>>(portsJson ?? "[]") ?? new List<int>();
+        var availablePorts = new List<int>();
+        try 
+        {
+            if (!string.IsNullOrWhiteSpace(portsJson) && portsJson.StartsWith("["))
+            {
+                 availablePorts = JsonSerializer.Deserialize<List<int>>(portsJson) ?? new List<int>();
+            }
+        }
+        catch
+        {
+            // Ignore parsing error if tags is not JSON array of ints
+        }
         
         if (availablePorts.Count < portCount)
         {
             // Auto-generate ports starting from 30000
             var startPort = 30000;
-            while (availablePorts.Count < portCount)
+            while (availablePorts.Count < portCount + 10) // buffer
             {
                 if (!availablePorts.Contains(startPort))
                 {
@@ -400,9 +441,9 @@ public class NetworkManager : INetworkManager
         
         // Update agent's available ports
         const string updatePortsSql = @"
-            UPDATE Agents 
-            SET AvailablePorts = @AvailablePorts 
-            WHERE Id = @AgentId";
+            UPDATE agent 
+            SET tags = @AvailablePorts 
+            WHERE id = @AgentId";
         
         await connection.ExecuteAsync(updatePortsSql, new
         {
@@ -426,10 +467,18 @@ public class NetworkManager : INetworkManager
         
         // Get current available ports
         const string getPortsSql = @"
-            SELECT AvailablePorts FROM Agents WHERE Id = @AgentId";
+            SELECT tags FROM agent WHERE id = @AgentId";
         
         var currentPortsJson = await connection.ExecuteScalarAsync<string>(getPortsSql, new { AgentId = agentId });
-        var currentPorts = JsonSerializer.Deserialize<List<int>>(currentPortsJson ?? "[]") ?? new List<int>();
+        var currentPorts = new List<int>();
+        try
+        {
+             if (!string.IsNullOrWhiteSpace(currentPortsJson) && currentPortsJson.StartsWith("["))
+             {
+                 currentPorts = JsonSerializer.Deserialize<List<int>>(currentPortsJson) ?? new List<int>();
+             }
+        }
+        catch {}
         
         // Add released ports back
         currentPorts.AddRange(ports);
@@ -437,9 +486,9 @@ public class NetworkManager : INetworkManager
         
         // Update agent
         const string updatePortsSql = @"
-            UPDATE Agents 
-            SET AvailablePorts = @AvailablePorts 
-            WHERE Id = @AgentId";
+            UPDATE agent 
+            SET tags = @AvailablePorts 
+            WHERE id = @AgentId";
         
         var result = await connection.ExecuteAsync(updatePortsSql, new
         {

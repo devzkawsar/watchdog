@@ -19,13 +19,29 @@ public class ApplicationRepository : IApplicationRepository
         
         const string sql = @"
             SELECT 
-                Id, Name, DisplayName, ExecutablePath, Arguments, WorkingDirectory,
-                ApplicationType, HealthCheckUrl, HealthCheckInterval, HeartbeatTimeout,
-                DesiredInstances, MinInstances, MaxInstances,
-                PortRequirements AS PortRequirementsJson, EnvironmentVariables AS EnvironmentVariablesJson, AutoStart,
-                CreatedAt, UpdatedAt
-            FROM Applications
-            ORDER BY Name";
+                id AS Id, 
+                name AS Name, 
+                display_name AS DisplayName, 
+                executable_path AS ExecutablePath, 
+                arguments AS Arguments, 
+                working_directory AS WorkingDirectory,
+                application_type AS ApplicationType, 
+                health_check_url AS HealthCheckUrl, 
+                health_check_interval AS HealthCheckInterval, 
+                heartbeat_timeout AS HeartbeatTimeout,
+                desired_instances AS DesiredInstances, 
+                min_instances AS MinInstances, 
+                max_instances AS MaxInstances,
+                port_requirements AS PortRequirementsJson, 
+                environment_variables AS EnvironmentVariablesJson, 
+                auto_start AS AutoStart,
+                auto_start AS AutoStart,
+                created AS Created,
+                updated AS Updated,
+                created_by AS CreatedBy,
+                updated_by AS UpdatedBy
+            FROM application
+            ORDER BY name";
         
         var applications = await connection.QueryAsync<Application>(sql);
         
@@ -54,13 +70,29 @@ public class ApplicationRepository : IApplicationRepository
         
         const string sql = @"
             SELECT 
-                Id, Name, DisplayName, ExecutablePath, Arguments, WorkingDirectory,
-                ApplicationType, HealthCheckUrl, HealthCheckInterval, HeartbeatTimeout,
-                DesiredInstances, MinInstances, MaxInstances,
-                PortRequirements AS PortRequirementsJson, EnvironmentVariables AS EnvironmentVariablesJson, AutoStart,
-                CreatedAt, UpdatedAt
-            FROM Applications
-            WHERE Id = @Id";
+                id AS Id, 
+                name AS Name, 
+                display_name AS DisplayName, 
+                executable_path AS ExecutablePath, 
+                arguments AS Arguments, 
+                working_directory AS WorkingDirectory,
+                application_type AS ApplicationType, 
+                health_check_url AS HealthCheckUrl, 
+                health_check_interval AS HealthCheckInterval, 
+                heartbeat_timeout AS HeartbeatTimeout,
+                desired_instances AS DesiredInstances, 
+                min_instances AS MinInstances, 
+                max_instances AS MaxInstances,
+                port_requirements AS PortRequirementsJson, 
+                environment_variables AS EnvironmentVariablesJson, 
+                auto_start AS AutoStart,
+                auto_start AS AutoStart,
+                created AS Created,
+                updated AS Updated,
+                created_by AS CreatedBy,
+                updated_by AS UpdatedBy
+            FROM application
+            WHERE id = @Id";
         
         var app = await connection.QueryFirstOrDefaultAsync<Application>(sql, new { Id = id });
         
@@ -87,16 +119,16 @@ public class ApplicationRepository : IApplicationRepository
         using var connection = _connectionFactory.CreateConnection();
         
         const string sql = @"
-            INSERT INTO Applications 
-                (Id, Name, DisplayName, ExecutablePath, Arguments, WorkingDirectory,
-                 ApplicationType, HealthCheckUrl, HealthCheckInterval, HeartbeatTimeout,
-                 DesiredInstances, MinInstances, MaxInstances,
-                 PortRequirements, EnvironmentVariables, AutoStart)
+            INSERT INTO application 
+                (id, name, display_name, executable_path, arguments, working_directory,
+                 application_type, health_check_url, health_check_interval, heartbeat_timeout,
+                 desired_instances, min_instances, max_instances,
+                 port_requirements, environment_variables, auto_start, created, created_by)
             VALUES 
                 (@Id, @Name, @DisplayName, @ExecutablePath, @Arguments, @WorkingDirectory,
                  @ApplicationType, @HealthCheckUrl, @HealthCheckInterval, @HeartbeatTimeout,
                  @DesiredInstances, @MinInstances, @MaxInstances,
-                 @PortRequirementsJson, @EnvironmentVariablesJson, @AutoStart)";
+                 @PortRequirementsJson, @EnvironmentVariablesJson, @AutoStart, GETUTCDATE(), NULL)";
         
         // Serialize JSON fields
         application.PortRequirementsJson = JsonSerializer.Serialize(application.PortRequirements);
@@ -110,24 +142,25 @@ public class ApplicationRepository : IApplicationRepository
         using var connection = _connectionFactory.CreateConnection();
         
         const string sql = @"
-            UPDATE Applications 
-            SET Name = @Name,
-                DisplayName = @DisplayName,
-                ExecutablePath = @ExecutablePath,
-                Arguments = @Arguments,
-                WorkingDirectory = @WorkingDirectory,
-                ApplicationType = @ApplicationType,
-                HealthCheckUrl = @HealthCheckUrl,
-                HealthCheckInterval = @HealthCheckInterval,
-                HeartbeatTimeout = @HeartbeatTimeout,
-                DesiredInstances = @DesiredInstances,
-                MinInstances = @MinInstances,
-                MaxInstances = @MaxInstances,
-                PortRequirements = @PortRequirementsJson,
-                EnvironmentVariables = @EnvironmentVariablesJson,
-                AutoStart = @AutoStart,
-                UpdatedAt = GETUTCDATE()
-            WHERE Id = @Id";
+            UPDATE application 
+            SET name = @Name,
+                display_name = @DisplayName,
+                executable_path = @ExecutablePath,
+                arguments = @Arguments,
+                working_directory = @WorkingDirectory,
+                application_type = @ApplicationType,
+                health_check_url = @HealthCheckUrl,
+                health_check_interval = @HealthCheckInterval,
+                heartbeat_timeout = @HeartbeatTimeout,
+                desired_instances = @DesiredInstances,
+                min_instances = @MinInstances,
+                max_instances = @MaxInstances,
+                port_requirements = @PortRequirementsJson,
+                environment_variables = @EnvironmentVariablesJson,
+                auto_start = @AutoStart,
+                updated = GETUTCDATE(),
+                updated_by = NULL
+            WHERE id = @Id";
         
         // Serialize JSON fields
         application.PortRequirementsJson = JsonSerializer.Serialize(application.PortRequirements);
@@ -140,7 +173,7 @@ public class ApplicationRepository : IApplicationRepository
     {
         using var connection = _connectionFactory.CreateConnection();
         
-        const string sql = "DELETE FROM Applications WHERE Id = @Id";
+        const string sql = "DELETE FROM application WHERE id = @Id";
         return await connection.ExecuteAsync(sql, new { Id = id });
     }
     
@@ -150,13 +183,26 @@ public class ApplicationRepository : IApplicationRepository
         
         const string sql = @"
             SELECT 
-                InstanceId, ApplicationId, AgentId, ProcessId,
-                Status, CpuPercent, MemoryMB, MemoryPercent, ThreadCount, HandleCount,
-                AssignedPorts, LastHealthCheck, LastHeartbeat, StartedAt, StoppedAt, 
-                CreatedAt, UpdatedAt
-            FROM ApplicationInstances
-            WHERE ApplicationId = @ApplicationId
-            ORDER BY CreatedAt DESC";
+                instance_id AS InstanceId, 
+                application_id AS ApplicationId, 
+                agent_id AS AgentId, 
+                process_id AS ProcessId,
+                status AS Status, 
+                cpu_percent AS CpuPercent, 
+                memory_mb AS MemoryMB, 
+                memory_percent AS MemoryPercent, 
+                thread_count AS ThreadCount, 
+                handle_count AS HandleCount,
+                assigned_port AS AssignedPort, 
+                last_health_check AS LastHealthCheck, 
+                last_heartbeat AS LastHeartbeat, 
+                started_at AS StartedAt, 
+                stopped_at AS StoppedAt, 
+                created_at AS CreatedAt, 
+                updated_at AS UpdatedAt
+            FROM application_instance
+            WHERE application_id = @ApplicationId
+            ORDER BY created_at DESC";
         
         return await connection.QueryAsync<ApplicationInstance>(sql, new { ApplicationId = applicationId });
     }
@@ -167,13 +213,26 @@ public class ApplicationRepository : IApplicationRepository
         
         const string sql = @"
             SELECT 
-                InstanceId, ApplicationId, AgentId, ProcessId,
-                Status, CpuPercent, MemoryMB, MemoryPercent, ThreadCount, HandleCount,
-                AssignedPorts, LastHealthCheck, LastHeartbeat, StartedAt, StoppedAt, 
-                CreatedAt, UpdatedAt
-            FROM ApplicationInstances
-            WHERE AgentId = @AgentId AND Status = 'Running'
-            ORDER BY CreatedAt DESC";
+                instance_id AS InstanceId, 
+                application_id AS ApplicationId, 
+                agent_id AS AgentId, 
+                process_id AS ProcessId,
+                status AS Status, 
+                cpu_percent AS CpuPercent, 
+                memory_mb AS MemoryMB, 
+                memory_percent AS MemoryPercent, 
+                thread_count AS ThreadCount, 
+                handle_count AS HandleCount,
+                assigned_port AS AssignedPort, 
+                last_health_check AS LastHealthCheck, 
+                last_heartbeat AS LastHeartbeat, 
+                started_at AS StartedAt, 
+                stopped_at AS StoppedAt, 
+                created_at AS CreatedAt, 
+                updated_at AS UpdatedAt
+            FROM application_instance
+            WHERE agent_id = @AgentId AND status = 'running'
+            ORDER BY created_at DESC";
         
         return await connection.QueryAsync<ApplicationInstance>(sql, new { AgentId = agentId });
     }
@@ -184,12 +243,25 @@ public class ApplicationRepository : IApplicationRepository
         
         const string sql = @"
             SELECT 
-                InstanceId, ApplicationId, AgentId, ProcessId,
-                Status, CpuPercent, MemoryMB, MemoryPercent, ThreadCount, HandleCount,
-                AssignedPorts, LastHealthCheck, LastHeartbeat, StartedAt, StoppedAt, 
-                CreatedAt, UpdatedAt
-            FROM ApplicationInstances
-            WHERE Status IN ('Running', 'Starting')";
+                instance_id AS InstanceId, 
+                application_id AS ApplicationId, 
+                agent_id AS AgentId, 
+                process_id AS ProcessId,
+                status AS Status, 
+                cpu_percent AS CpuPercent, 
+                memory_mb AS MemoryMB, 
+                memory_percent AS MemoryPercent, 
+                thread_count AS ThreadCount, 
+                handle_count AS HandleCount,
+                assigned_port AS AssignedPort, 
+                last_health_check AS LastHealthCheck, 
+                last_heartbeat AS LastHeartbeat, 
+                started_at AS StartedAt, 
+                stopped_at AS StoppedAt, 
+                created_at AS CreatedAt, 
+                updated_at AS UpdatedAt
+            FROM application_instance
+            WHERE status IN ('running', 'starting')";
         
         return await connection.QueryAsync<ApplicationInstance>(sql);
     }
@@ -200,19 +272,19 @@ public class ApplicationRepository : IApplicationRepository
         
         const string sql = @"
             SELECT
-                ai.InstanceId,
-                ai.ApplicationId,
-                ai.AgentId,
-                ai.Status,
-                ai.LastHeartbeat,
-                a.HealthCheckInterval,
-                a.HeartbeatTimeout
-            FROM ApplicationInstances ai
-            INNER JOIN Applications a ON a.Id = ai.ApplicationId
-            WHERE ai.Status IN ('Running', 'Starting')
+                ai.instance_id AS InstanceId,
+                ai.application_id AS ApplicationId,
+                ai.agent_id AS AgentId,
+                ai.status AS Status,
+                ai.last_heartbeat AS LastHeartbeat,
+                a.health_check_interval AS HealthCheckInterval,
+                a.heartbeat_timeout AS HeartbeatTimeout
+            FROM application_instance ai
+            INNER JOIN application a ON a.id = ai.application_id
+            WHERE ai.status IN ('running', 'starting')
               AND (
-                    ai.LastHeartbeat IS NULL
-                    OR ai.LastHeartbeat < DATEADD(SECOND, -a.HeartbeatTimeout, GETUTCDATE())
+                    ai.last_heartbeat IS NULL
+                    OR ai.last_heartbeat < DATEADD(SECOND, -a.heartbeat_timeout, GETUTCDATE())
                   )";
         
         return await connection.QueryAsync<ApplicationInstanceHeartbeatInfo>(sql);
@@ -223,10 +295,10 @@ public class ApplicationRepository : IApplicationRepository
         using var connection = _connectionFactory.CreateConnection();
         
         const string sql = @"
-            UPDATE ApplicationInstances
-            SET Status = @Status,
-                UpdatedAt = GETUTCDATE()
-            WHERE InstanceId = @InstanceId";
+            UPDATE application_instance
+            SET status = @Status,
+                updated_at = GETUTCDATE()
+            WHERE instance_id = @InstanceId";
         
         return await connection.ExecuteAsync(sql, new
         {
@@ -236,19 +308,20 @@ public class ApplicationRepository : IApplicationRepository
     }
     
     public async Task<int> UpdateInstanceStatus(string instanceId, string status, 
-        double? cpuPercent = null, double? memoryMB = null, int? processId = null)
+        double? cpuPercent = null, double? memoryMB = null, int? processId = null, string? agentId = null)
     {
         using var connection = _connectionFactory.CreateConnection();
         
         const string sql = @"
-            UPDATE ApplicationInstances 
-            SET Status = @Status,
-                CpuPercent = COALESCE(@CpuPercent, CpuPercent),
-                MemoryMB = COALESCE(@MemoryMB, MemoryMB),
-                ProcessId = COALESCE(@ProcessId, ProcessId),
-                LastHeartbeat = GETUTCDATE(),
-                UpdatedAt = GETUTCDATE()
-            WHERE InstanceId = @InstanceId";
+            UPDATE application_instance 
+            SET status = @Status,
+                cpu_percent = COALESCE(@CpuPercent, cpu_percent),
+                memory_mb = COALESCE(@MemoryMB, memory_mb),
+                process_id = COALESCE(@ProcessId, process_id),
+                agent_id = COALESCE(@AgentId, agent_id),
+                last_heartbeat = GETUTCDATE(),
+                updated_at = GETUTCDATE()
+            WHERE instance_id = @InstanceId";
         
         return await connection.ExecuteAsync(sql, new 
         { 
@@ -256,7 +329,8 @@ public class ApplicationRepository : IApplicationRepository
             Status = status,
             CpuPercent = cpuPercent,
             MemoryMB = memoryMB,
-            ProcessId = processId
+            ProcessId = processId,
+            AgentId = agentId
         });
     }
 }
@@ -279,8 +353,10 @@ public class Application
     public List<PortRequirement> PortRequirements { get; set; } = new();
     public Dictionary<string, string> EnvironmentVariables { get; set; } = new();
     public bool AutoStart { get; set; } = true;
-    public DateTime CreatedAt { get; set; }
-    public DateTime UpdatedAt { get; set; }
+    public DateTime Created { get; set; }
+    public DateTime? Updated { get; set; }
+    public long? CreatedBy { get; set; }
+    public long? UpdatedBy { get; set; }
     
     // JSON serialized fields for database storage
     public string PortRequirementsJson { get; set; } = string.Empty;
@@ -293,13 +369,13 @@ public class ApplicationInstance
     public string ApplicationId { get; set; } = string.Empty;
     public string? AgentId { get; set; }
     public int? ProcessId { get; set; }
-    public string Status { get; set; } = "Pending"; // Pending, Running, Stopped, Error
+    public string Status { get; set; } = "pending"; // pending, running, stopped, error
     public double? CpuPercent { get; set; }
     public double? MemoryMB { get; set; }
     public double? MemoryPercent { get; set; }
     public int? ThreadCount { get; set; }
     public int? HandleCount { get; set; }
-    public string AssignedPorts { get; set; } = string.Empty; // JSON
+    public int? AssignedPort { get; set; } // Changed from AssignedPorts string
     public DateTime? LastHealthCheck { get; set; }
     public DateTime? LastHeartbeat { get; set; }
     public DateTime? StartedAt { get; set; }

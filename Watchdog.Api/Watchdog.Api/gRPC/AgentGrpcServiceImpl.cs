@@ -109,26 +109,15 @@ public class AgentGrpcServiceImpl : AgentService.AgentServiceBase
             foreach (var instanceStatus in activeInstanceStatuses)
             {
                 var originalInstance = activeInstances.First(i => i.InstanceId == instanceStatus.InstanceId);
-                if (!string.IsNullOrEmpty(originalInstance.AssignedPorts))
+                if (originalInstance.AssignedPort.HasValue && originalInstance.AssignedPort.Value > 0)
                 {
-                    try 
-                    {
-                        var ports = JsonSerializer.Deserialize<List<PortMapping>>(originalInstance.AssignedPorts);
-                        if (ports != null)
-                        {
-                             instanceStatus.Ports.AddRange(ports.Select(p => new Watchdog.Api.Protos.PortMapping
-                             {
-                                 Name = p.Name ?? "",
-                                 InternalPort = p.InternalPort,
-                                 ExternalPort = p.ExternalPort,
-                                 Protocol = p.Protocol ?? "TCP"
-                             }));
-                        }
-                    }
-                    catch
-                    {
-                        // Ignore parsing errors
-                    }
+                     instanceStatus.Ports.Add(new Watchdog.Api.Protos.PortMapping
+                     {
+                         Name = "http", // Default assumption since we only store port
+                         InternalPort = originalInstance.AssignedPort.Value,
+                         ExternalPort = originalInstance.AssignedPort.Value,
+                         Protocol = "TCP"
+                     });
                 }
             }
             
@@ -153,329 +142,248 @@ public class AgentGrpcServiceImpl : AgentService.AgentServiceBase
         }
     }
     
-    // Status reporting
     public override async Task<StatusReportResponse> ReportStatus(
         StatusReportRequest request, ServerCallContext context)
     {
         try
         {
+            using var connection = _connectionFactory.CreateConnection();
+
             // Update agent heartbeat
             await _agentManager.UpdateAgentHeartbeat(request.AgentId);
             
             // Process application statuses
             foreach (var appStatus in request.ApplicationStatuses)
             {
-                int? processId = null;
-                if (int.TryParse(appStatus.ProcessId, out int pid) && pid > 0)
-                {
-                    processId = pid;
-                }
-
-                var status = NormalizeStatus(appStatus.Status);
-                _logger.LogInformation("Updating instance {InstanceId} status to {Status} (Original: {OriginalStatus})", 
-                    appStatus.InstanceId, status, appStatus.Status);
+                // Ensure we have a valid instance ID
+                if (string.IsNullOrEmpty(appStatus.InstanceId)) continue;
                 
-                await _applicationManager.UpdateInstanceStatus(
-                    appStatus.InstanceId,
-                    status,
+                // Update instance status in DB
+                int.TryParse(appStatus.ProcessId, out int processId);
+
+                // If this is an adopted instance, check for and remove any orphan record for the same process
+                if (appStatus.InstanceId.Contains("-adopted-") && processId > 0)
+                {
+                    const string findOrphanSql = @"
+                        SELECT instance_id 
+                        FROM application_instance 
+                        WHERE application_id = @ApplicationId 
+                          AND process_id = @ProcessId 
+                          AND agent_id IS NULL";
+                    
+                    var orphanId = await connection.QueryFirstOrDefaultAsync<string>(findOrphanSql, new 
+                    { 
+                        ApplicationId = appStatus.ApplicationId,
+                        ProcessId = processId
+                    });
+
+                    if (!string.IsNullOrEmpty(orphanId))
+                    {
+                        await connection.ExecuteAsync("DELETE FROM application_instance WHERE instance_id = @OrphanId", new { OrphanId = orphanId });
+                        _logger.LogInformation("Removed orphan instance record {OrphanId} in favor of adopted instance {AdoptedId}", orphanId, appStatus.InstanceId);
+                    }
+                }
+                
+                await _applicationRepository.UpdateInstanceStatus(
+                    appStatus.InstanceId, 
+                    NormalizeStatus(appStatus.Status),
                     appStatus.CpuPercent,
                     appStatus.MemoryMb,
-                    processId);
+                    processId > 0 ? processId : null,
+                    request.AgentId);
                 
-                // If application just spawned, record ports
-                if (appStatus.Status == "Running" && appStatus.Ports.Any())
+                // If ports are reported, update them as well
+                if (appStatus.Ports.Count > 0)
                 {
-                    await RecordApplicationPortsAsync(
-                        appStatus.InstanceId,
-                        appStatus.Ports.ToList());
+                    await RecordApplicationPortsAsync(appStatus.InstanceId, appStatus.Ports.ToList());
                 }
+            }
+            
+            // Get pending commands
+            var pendingCommands = await _commandService.GetPendingCommands(request.AgentId);
+            var commandRequests = new List<CommandRequest>();
+            
+            foreach (var cmd in pendingCommands)
+            {
+                // Convert to gRPC command
+                var grpcCommand = new CommandRequest
+                {
+                    CommandId = cmd.CommandId,
+                    CommandType = cmd.CommandType,
+                    ApplicationId = cmd.ApplicationId,
+                    InstanceId = cmd.InstanceId,
+                    Parameters = cmd.Parameters,
+                    Timestamp = cmd.CreatedAt.Ticks,
+                    AgentId = cmd.AgentId
+                };
+                
+                commandRequests.Add(grpcCommand);
+                
+                // Mark as sent
+                await _commandService.MarkCommandAsSent(cmd.CommandId);
             }
             
             return new StatusReportResponse
             {
                 Success = true,
-                Message = "Status report processed"
+                Message = "Status processed successfully",
+                PendingCommands = { commandRequests }
             };
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error processing status report from agent {AgentId}", 
-                request.AgentId);
+            _logger.LogError(ex, "Error reporting status for agent {AgentId}", request.AgentId);
             
             return new StatusReportResponse
             {
                 Success = false,
-                Message = $"Error: {ex.Message}"
+                Message = $"Error processing status: {ex.Message}"
             };
         }
     }
-    
-    // Bi-directional streaming
+
     public override async Task CommandStream(
-        IAsyncStreamReader<AgentMessage> requestStream,
-        IServerStreamWriter<ControlPlaneMessage> responseStream,
+        IAsyncStreamReader<AgentMessage> requestStream, 
+        IServerStreamWriter<ControlPlaneMessage> responseStream, 
         ServerCallContext context)
     {
-        var agentId = string.Empty;
+        string? agentId = null;
+        string connectionId = Guid.NewGuid().ToString();
         
         try
         {
-            // Wait for first message to identify agent
-            if (!await requestStream.MoveNext())
-                return;
-            
-            // Process first message
-            var firstMessage = requestStream.Current;
-            agentId = ExtractAgentIdFromMessage(firstMessage);
-            
-            if (string.IsNullOrEmpty(agentId))
-            {
-                _logger.LogWarning("Received message without agent ID");
-                return;
-            }
-            
-            _logger.LogInformation("Agent {AgentId} connected via streaming", agentId);
-            
-            // Register agent stream
-            var connectionId = context.Peer; // Use Peer as connection ID
-            _agentGrpcService.RegisterAgentConnection(agentId, responseStream, connectionId);
-
-            // Streaming-only command delivery:
-            // Flush any queued (Pending) commands once on connect.
-            await SendPendingCommandsToAgentAsync(agentId, responseStream);
+            _logger.LogInformation("New agent connection started (ConnectionId: {ConnectionId})", connectionId);
             
             // Process incoming messages
-            await foreach (var message in requestStream.ReadAllAsync())
+            await foreach (var message in requestStream.ReadAllAsync(context.CancellationToken))
             {
-                await ProcessAgentMessageAsync(agentId, message);
-                await _agentGrpcService.ProcessAgentMessageAsync(agentId, message);
+                // Identify agent from first message or heartbeat
+                if (agentId == null)
+                {
+                    if (message.MessageCase == AgentMessage.MessageOneofCase.Heartbeat)
+                    {
+                        agentId = message.Heartbeat.AgentId;
+                        _agentGrpcService.RegisterAgentConnection(agentId, responseStream, connectionId);
+                        _logger.LogInformation("Agent {AgentId} identified and registered (ConnectionId: {ConnectionId})", 
+                            agentId, connectionId);
+                    }
+                    else if (message.MessageCase == AgentMessage.MessageOneofCase.Error)
+                    {
+                        agentId = message.Error.AgentId;
+                        // Don't register connection yet if we only got an error, wait for heartbeat
+                    }
+                }
+                
+                // Update last seen
+                if (agentId != null)
+                {
+                    await _agentGrpcService.ProcessAgentMessageAsync(agentId, message);
+                }
+                
+                // Process message
+                switch (message.MessageCase)
+                {
+                    case AgentMessage.MessageOneofCase.Heartbeat:
+                        // Heartbeat already handled for keepalive
+                        break;
+                        
+                    case AgentMessage.MessageOneofCase.Spawned:
+                        _logger.LogInformation("Received application spawned report from {AgentId}: {AppId} instance {InstanceId} (PID: {Pid})", 
+                            agentId, message.Spawned.ApplicationId, message.Spawned.InstanceId, message.Spawned.ProcessId);
+                            
+                        if (agentId != null)
+                        {
+                            await RecordInstanceSpawnedAsync(agentId, message.Spawned);
+                            
+                            // Check for pending commands to execute next
+                            // Note: Commands are pushed via AgentGrpcService, so we don't need to poll here explicitly
+                        }
+                        break;
+                        
+                    case AgentMessage.MessageOneofCase.Stopped:
+                        _logger.LogInformation("Received application stopped report from {AgentId}: {AppId} instance {InstanceId} (Exit: {ExitCode})", 
+                            agentId, message.Stopped.ApplicationId, message.Stopped.InstanceId, message.Stopped.ExitCode);
+                            
+                        if (agentId != null)
+                        {
+                            await RecordInstanceStoppedAsync(agentId, message.Stopped);
+                        }
+                        break;
+                        
+                    case AgentMessage.MessageOneofCase.Error:
+                        _logger.LogError("Received error from {AgentId}: {ErrorType} - {ErrorMessage}", 
+                            message.Error.AgentId, message.Error.ErrorType, message.Error.ErrorMessage);
+                            
+                        if (agentId != null)
+                        {
+                            await RecordInstanceErrorAsync(agentId, message.Error);
+                        }
+                        break;
+                }
             }
         }
-        catch (RpcException rpcEx) when (rpcEx.StatusCode == StatusCode.Cancelled)
+        catch (OperationCanceledException)
         {
-            _logger.LogInformation("Agent {AgentId} disconnected from streaming", agentId);
+            _logger.LogInformation("Agent connection canceled (AgentId: {AgentId}, ConnectionId: {ConnectionId})", 
+                agentId ?? "Unknown", connectionId);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error in streaming connection for agent {AgentId}", agentId);
+            _logger.LogError(ex, "Error in command stream (AgentId: {AgentId}, ConnectionId: {ConnectionId})", 
+                agentId ?? "Unknown", connectionId);
         }
         finally
         {
-            // Clean up
-            if (!string.IsNullOrEmpty(agentId))
+            if (agentId != null)
+            {
                 _agentGrpcService.UnregisterAgentConnection(agentId);
-        }
-    }
-    
-    // Execute specific command
-    public override async Task<CommandResponse> ExecuteCommand(
-        CommandRequest request, ServerCallContext context)
-    {
-        try
-        {
-            _logger.LogInformation("Executing command {CommandType} for {InstanceId}",
-                request.CommandType, request.InstanceId);
-            
-            // Send command to agent via singleton service if connected
-            var sent = await _agentGrpcService.SendCommandToAgentAsync(request.AgentId, request);
-            
-            if (sent)
-            {
-                // We don't mark as sent here because AgentGrpcService doesn't do it.
-                // Actually CommandService.QueueSpawnCommand calls TrySendCommandImmediately which marks as sent.
-                // But this is ExecuteCommand (likely from REST API).
-                
-                return new CommandResponse
-                {
-                    CommandId = request.CommandId,
-                    Success = true,
-                    Message = "Command sent to agent",
-                    Timestamp = DateTime.UtcNow.Ticks
-                };
-            }
-            else
-            {
-                // Agent not connected, queue command
-                await _commandService.QueueCommand(new CommandQueueItem
-                {
-                    CommandId = request.CommandId,
-                    CommandType = request.CommandType,
-                    AgentId = request.AgentId,
-                    ApplicationId = request.ApplicationId,
-                    InstanceId = request.InstanceId,
-                    Parameters = request.Parameters,
-                    Status = "Pending"
-                });
-                
-                return new CommandResponse
-                {
-                    CommandId = request.CommandId,
-                    Success = true,
-                    Message = "Command queued (agent offline)",
-                    Timestamp = DateTime.UtcNow.Ticks
-                };
+                _logger.LogInformation("Agent {AgentId} disconnected (ConnectionId: {ConnectionId})", 
+                    agentId, connectionId);
             }
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error executing command {CommandId}", request.CommandId);
-            
-            return new CommandResponse
-            {
-                CommandId = request.CommandId,
-                Success = false,
-                Message = $"Error: {ex.Message}",
-                Timestamp = DateTime.UtcNow.Ticks
-            };
-        }
-    }
-    
-    // This is now handled by AgentGrpcService
-    
-    private async Task ProcessAgentMessageAsync(string agentId, AgentMessage message)
-    {
-        try
-        {
-            switch (message.MessageCase)
-            {
-                case AgentMessage.MessageOneofCase.Heartbeat:
-                    await _agentManager.UpdateAgentHeartbeat(agentId);
-                    break;
-                    
-                case AgentMessage.MessageOneofCase.Spawned:
-                    var spawned = message.Spawned;
-                    _logger.LogInformation(
-                        "Application {ApplicationId} instance {InstanceId} spawned on agent {AgentId} (PID: {ProcessId})",
-                        spawned.ApplicationId, spawned.InstanceId, agentId, spawned.ProcessId);
-                    
-                    // Record instance in database
-                    await RecordInstanceSpawnedAsync(agentId, spawned);
-                    break;
-                    
-                case AgentMessage.MessageOneofCase.Stopped:
-                    var stopped = message.Stopped;
-                    _logger.LogInformation(
-                        "Application {ApplicationId} instance {InstanceId} stopped on agent {AgentId} (Exit code: {ExitCode})",
-                        stopped.ApplicationId, stopped.InstanceId, agentId, stopped.ExitCode);
-                    
-                    // Update instance status
-                    await _applicationManager.UpdateInstanceStatus(
-                        stopped.InstanceId, "Stopped");
-                    break;
-                    
-                case AgentMessage.MessageOneofCase.Error:
-                    var error = message.Error;
-                    _logger.LogError(
-                        "Error from agent {AgentId}: {ErrorType} - {ErrorMessage} (Instance: {InstanceId})",
-                        agentId, error.ErrorType, error.ErrorMessage, error.InstanceId);
-                        
-                    // Auto-restart logic for critical errors
-                    if (!string.IsNullOrEmpty(error.InstanceId) && IsCriticalError(error.ErrorType))
-                    {
-                        _logger.LogWarning("Auto-restarting instance {InstanceId} due to critical error: {ErrorType}", 
-                            error.InstanceId, error.ErrorType);
-                            
-                        // Use the high-level QueueRestartCommand which triggers immediate delivery
-                        await _commandService.QueueRestartCommand(agentId, error.ApplicationId, error.InstanceId);
-                    }
-                    else if (string.IsNullOrEmpty(error.InstanceId) && IsCriticalError(error.ErrorType))
-                    {
-                        _logger.LogWarning("Received critical error {ErrorType} but no InstanceId was provided. Cannot auto-restart.", error.ErrorType);
-                    }
-                    break;
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error processing message from agent {AgentId}", agentId);
-        }
-    }
-    
-    private bool IsCriticalError(string errorType)
-    {
-        return errorType switch
-        {
-            "HealthCheckFailed" => true,
-            "ProcessExited" => true,
-            "ResourceExceeded" => true,
-            "HungProcess" => true,
-            _ => false
-        };
-    }
-    
-    private async Task SendPendingCommandsToAgentAsync(
-        string agentId, IServerStreamWriter<ControlPlaneMessage> responseStream)
-    {
-        var pendingCommands = await _commandService.GetPendingCommands(agentId);
-        
-        foreach (var cmd in pendingCommands)
-        {
-            try
-            {
-                var controlMessage = await ConvertToControlPlaneMessageAsync(cmd);
-                await responseStream.WriteAsync(controlMessage);
-                
-                await _commandService.MarkCommandAsSent(cmd.CommandId);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to send command to agent {AgentId}", agentId);
-            }
-        }
-    }
-    
-    private string ExtractAgentIdFromMessage(AgentMessage message)
-    {
-        return message.MessageCase switch
-        {
-            AgentMessage.MessageOneofCase.Heartbeat => message.Heartbeat.AgentId,
-            AgentMessage.MessageOneofCase.Spawned => ExtractAgentIdFromInstanceId(message.Spawned.InstanceId),
-            AgentMessage.MessageOneofCase.Stopped => ExtractAgentIdFromInstanceId(message.Stopped.InstanceId),
-            AgentMessage.MessageOneofCase.Error => message.Error.AgentId,
-            _ => string.Empty
-        };
     }
 
-    private static string ExtractAgentIdFromInstanceId(string instanceId)
-    {
-        // Instance ID format: appId-agentId-uuid
-        var parts = instanceId.Split('-');
-        return parts.Length >= 2 ? parts[1] : string.Empty;
-    }
-    
     private async Task RecordInstanceSpawnedAsync(string agentId, ApplicationSpawned spawned)
     {
         using var connection = _connectionFactory.CreateConnection();
         
         const string sql = @"
-            IF EXISTS (SELECT 1 FROM ApplicationInstances WHERE InstanceId = @InstanceId)
+            IF EXISTS (SELECT 1 FROM application_instance WHERE instance_id = @InstanceId)
             BEGIN
-                UPDATE ApplicationInstances 
-                SET ProcessId = @ProcessId, 
-                    Status = 'Running', 
-                    AssignedPorts = @AssignedPorts, 
-                    StartedAt = @StartedAt,
-                    LastHeartbeat = GETUTCDATE(),
-                    UpdatedAt = GETUTCDATE()
-                WHERE InstanceId = @InstanceId
+                UPDATE application_instance 
+                SET process_id = @ProcessId, 
+                    agent_id = @AgentId,
+                    status = 'running', 
+                    assigned_port = @AssignedPort, 
+                    started_at = @StartedAt,
+                    last_heartbeat = GETUTCDATE(),
+                    updated_at = GETUTCDATE()
+                WHERE instance_id = @InstanceId
             END
             ELSE
             BEGIN
-                INSERT INTO ApplicationInstances 
-                    (InstanceId, ApplicationId, AgentId, ProcessId, Status, 
-                     AssignedPorts, StartedAt, CreatedAt)
+                INSERT INTO application_instance 
+                    (instance_id, application_id, agent_id, process_id, status, 
+                     assigned_port, started_at, created_at, last_heartbeat)
                 VALUES 
-                    (@InstanceId, @ApplicationId, @AgentId, @ProcessId, 'Running',
-                     @AssignedPorts, @StartedAt, GETUTCDATE())
+                    (@InstanceId, @ApplicationId, @AgentId, @ProcessId, 'running',
+                     @AssignedPort, @StartedAt, GETUTCDATE(), GETUTCDATE())
             END";
         
+        // Extract primary port
+        int assignedPort = 0;
+        if (spawned.Ports.Count > 0)
+        {
+            assignedPort = spawned.Ports[0].ExternalPort;
+        }
+
         await connection.ExecuteAsync(sql, new
         {
             InstanceId = spawned.InstanceId,
             ApplicationId = spawned.ApplicationId,
             AgentId = agentId,
             ProcessId = spawned.ProcessId,
-            AssignedPorts = JsonSerializer.Serialize(spawned.Ports),
+            AssignedPort = assignedPort,
             StartedAt = DateTime.UnixEpoch.AddSeconds(spawned.StartTime)
         });
     }
@@ -485,24 +393,68 @@ public class AgentGrpcServiceImpl : AgentService.AgentServiceBase
         using var connection = _connectionFactory.CreateConnection();
         
         const string sql = @"
-            UPDATE ApplicationInstances 
-            SET AssignedPorts = @AssignedPorts
-            WHERE InstanceId = @InstanceId";
+            UPDATE application_instance 
+            SET assigned_port = @AssignedPort,
+                updated_at = GETUTCDATE()
+            WHERE instance_id = @InstanceId";
+            
+        int assignedPort = 0;
+        if (ports.Count > 0)
+        {
+            assignedPort = ports[0].ExternalPort;
+        }
         
         await connection.ExecuteAsync(sql, new
         {
             InstanceId = instanceId,
-            AssignedPorts = JsonSerializer.Serialize(ports)
+            AssignedPort = assignedPort
         });
+    }
+
+    private async Task RecordInstanceStoppedAsync(string agentId, ApplicationStopped stopped)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        
+        const string sql = @"
+            UPDATE application_instance 
+            SET status = 'stopped', 
+                updated_at = GETUTCDATE()
+            WHERE instance_id = @InstanceId";
+            
+        await connection.ExecuteAsync(sql, new
+        {
+            InstanceId = stopped.InstanceId
+        });
+    }
+
+    private async Task RecordInstanceErrorAsync(string agentId, ErrorReport error)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        
+        // If we have an instance ID, update the instance status
+        if (!string.IsNullOrEmpty(error.InstanceId))
+        {
+            const string sql = @"
+                UPDATE application_instance 
+                SET status = 'error', 
+                    updated_at = GETUTCDATE()
+                WHERE instance_id = @InstanceId";
+                
+            await connection.ExecuteAsync(sql, new
+            {
+                InstanceId = error.InstanceId
+            });
+        }
+        
     }
     
     private Task<ControlPlaneMessage> ConvertToControlPlaneMessageAsync(CommandQueueItem cmd)
     {
         var message = new ControlPlaneMessage();
         
-        switch (cmd.CommandType)
+        switch (cmd.CommandType.ToLower())
         {
-            case "SPAWN":
+            case "spawn":
                 var spawnParams = JsonSerializer.Deserialize<SpawnCommandParams>(cmd.Parameters);
                 if (spawnParams != null)
                 {
@@ -527,7 +479,7 @@ public class AgentGrpcServiceImpl : AgentService.AgentServiceBase
                 }
                 break;
                 
-            case "KILL":
+            case "kill":
                 message.Kill = new KillCommand
                 {
                     InstanceId = cmd.InstanceId,
@@ -536,7 +488,7 @@ public class AgentGrpcServiceImpl : AgentService.AgentServiceBase
                 };
                 break;
                 
-            case "RESTART":
+            case "restart":
                 var restartParams = JsonSerializer.Deserialize<RestartCommandParams>(cmd.Parameters);
                 message.Restart = new RestartCommand
                 {
@@ -551,16 +503,16 @@ public class AgentGrpcServiceImpl : AgentService.AgentServiceBase
 
     private string NormalizeStatus(string status)
     {
-        if (string.IsNullOrEmpty(status)) return "Running";
+        if (string.IsNullOrEmpty(status)) return "running";
 
-        var allowed = new[] { "Pending", "Starting", "Running", "Stopping", "Stopped", "Error" };
+        var allowed = new[] { "pending", "starting", "running", "stopping", "stopped", "error" };
         foreach (var s in allowed)
         {
             if (string.Equals(s, status, StringComparison.OrdinalIgnoreCase))
                 return s;
         }
 
-        return "Running"; // Default to Running if unknown to satisfy constraint
+        return "running"; // Default to running if unknown to satisfy constraint
     }
 }
 
@@ -595,7 +547,7 @@ public class CommandQueueItem
     public string ApplicationId { get; set; } = string.Empty;
     public string InstanceId { get; set; } = string.Empty;
     public string Parameters { get; set; } = string.Empty; // JSON
-    public string Status { get; set; } = "Pending"; // Pending, Sent, Executed, Failed
+    public string Status { get; set; } = "pending"; // pending, sent, executing, failed
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? SentAt { get; set; }
     public DateTime? CompletedAt { get; set; }

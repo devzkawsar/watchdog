@@ -32,7 +32,7 @@ public class HeartbeatMonitorBackgroundService : BackgroundService
                 {
                     foreach (var stale in staleInstances)
                     {
-                        var updated = await repo.UpdateInstanceStatusWithoutHeartbeat(stale.InstanceId, "Error");
+                        var updated = await repo.UpdateInstanceStatusWithoutHeartbeat(stale.InstanceId, "error");
                         if (updated > 0)
                         {
                             _logger.LogWarning(

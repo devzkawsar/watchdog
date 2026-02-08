@@ -46,10 +46,10 @@ public class ScalingEngine : IScalingEngine
         
         // Update desired instances
         const string sql = @"
-            UPDATE Applications 
-            SET DesiredInstances = @DesiredInstances,
-                UpdatedAt = GETUTCDATE()
-            WHERE Id = @ApplicationId";
+            UPDATE application 
+            SET desired_instances = @DesiredInstances,
+                updated = GETUTCDATE()
+            WHERE id = @ApplicationId";
         
         await connection.ExecuteAsync(sql, new
         {
@@ -59,7 +59,7 @@ public class ScalingEngine : IScalingEngine
         
         // Get current running instances
         var instances = await _applicationRepository.GetApplicationInstances(applicationId);
-        var runningInstances = instances.Count(i => i.Status == "Running");
+        var runningInstances = instances.Count(i => i.Status == "running");
         
         if (runningInstances < desiredInstances)
         {
@@ -110,12 +110,18 @@ public class ScalingEngine : IScalingEngine
         // Get running instances
         var instances = await _applicationRepository.GetApplicationInstances(applicationId);
         var runningInstances = instances
-            .Where(i => i.Status == "Running")
+            .Where(i => i.Status == "running")
             .OrderBy(i => i.StartedAt) // Remove oldest first
             .Take(instancesToRemove);
         
         foreach (var instance in runningInstances)
         {
+            if (string.IsNullOrEmpty(instance.AgentId))
+            {
+                _logger.LogWarning("Cannot scale down instance {InstanceId} as it has no assigned agent", instance.InstanceId);
+                continue;
+            }
+
             await _commandService.QueueKillCommand(
                 instance.AgentId,
                 instance.ApplicationId,
@@ -127,7 +133,7 @@ public class ScalingEngine : IScalingEngine
     {
         // Get current instances
         var instances = await _applicationRepository.GetApplicationInstances(application.Id);
-        var runningInstances = instances.Count(i => i.Status == "Running");
+        var runningInstances = instances.Count(i => i.Status == "running");
         
         // Check min instances
         if (runningInstances < application.MinInstances)
@@ -166,15 +172,22 @@ public class ScalingEngine : IScalingEngine
         
         const string assignedSql = @"
             SELECT 
-                a.Id, a.Name, a.IpAddress, a.Status,
-                a.TotalMemoryMB, a.AvailableMemoryMB, a.CpuCores,
-                a.AvailablePorts, a.LastHeartbeat, a.RegisteredAt
-            FROM AgentApplications aa
-            INNER JOIN Agents a ON aa.AgentId = a.Id
-            WHERE aa.ApplicationId = @ApplicationId
-            AND a.Status = 'Online'
-            AND a.LastHeartbeat > DATEADD(MINUTE, -5, GETUTCDATE())
-            ORDER BY a.AvailableMemoryMB DESC";
+                a.id AS Id, 
+                a.name AS Name, 
+                a.ip_address AS IpAddress, 
+                a.status AS Status,
+                a.total_memory_mb AS TotalMemoryMB, 
+                a.available_memory_mb AS AvailableMemoryMB, 
+                a.cpu_cores AS CpuCores,
+                a.tags AS Tags, 
+                a.last_heartbeat AS LastHeartbeat, 
+                a.created AS RegisteredAt
+            FROM agent_application aa
+            INNER JOIN agent a ON aa.agent_id = a.id
+            WHERE aa.application_id = @ApplicationId
+            AND a.status = 'online'
+            AND a.last_heartbeat > DATEADD(MINUTE, -5, GETUTCDATE())
+            ORDER BY a.available_memory_mb DESC";
         
         var assignedAgents = await connection.QueryAsync<Agent>(assignedSql, new { ApplicationId = applicationId });
         var assignedList = assignedAgents.ToList();

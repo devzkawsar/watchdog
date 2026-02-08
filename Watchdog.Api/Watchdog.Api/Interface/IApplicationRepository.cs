@@ -12,7 +12,7 @@ public interface IApplicationRepository
     Task<IEnumerable<ApplicationInstance>> GetApplicationInstances(string applicationId);
     Task<IEnumerable<ApplicationInstance>> GetActiveInstancesForAgent(string agentId);
     Task<int> UpdateInstanceStatus(string instanceId, string status, 
-        double? cpuPercent = null, double? memoryMB = null, int? processId = null);
+        double? cpuPercent = null, double? memoryMB = null, int? processId = null, string? agentId = null);
     Task<IEnumerable<ApplicationInstanceHeartbeatInfo>> GetStaleInstancesByHeartbeat();
     Task<int> UpdateInstanceStatusWithoutHeartbeat(string instanceId, string status);
 }

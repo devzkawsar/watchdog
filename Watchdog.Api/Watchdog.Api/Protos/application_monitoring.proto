@@ -17,6 +17,9 @@ message ApplicationRegistrationRequest {
   string application_name = 3;
   int32 expected_heartbeat_interval_seconds = 4;
   int64 registered_at_unix_seconds = 5;
+  string executable_path = 6;
+  string arguments = 7;
+  int32 application_type = 8;
 }
 
 message ApplicationRegistrationResponse {
@@ -29,6 +32,8 @@ message ApplicationReadyRequest {
   string instance_id = 2;
   int64 timestamp_unix_seconds = 3;
   string message = 4;
+  int32 process_id = 5;
+  int32 assigned_port = 6;
 }
 
 message ApplicationReadyResponse {

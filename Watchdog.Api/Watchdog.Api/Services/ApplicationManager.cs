@@ -181,13 +181,20 @@ public class ApplicationManager : IApplicationManager
     public async Task<bool> StopApplication(string applicationId)
     {
         var instances = await _applicationRepository.GetApplicationInstances(applicationId);
-        var runningInstances = instances.Where(i => i.Status == "Running");
+        var runningInstances = instances.Where(i => i.Status == "running");
         
         _logger.LogInformation("Stopping {Count} instances of application {ApplicationId}",
             runningInstances.Count(), applicationId);
         
         foreach (var instance in runningInstances)
         {
+            if (string.IsNullOrEmpty(instance.AgentId))
+            {
+                _logger.LogWarning("Cannot stop instance {InstanceId} as it has no assigned agent. Marking as stopped.", instance.InstanceId);
+                await _applicationRepository.UpdateInstanceStatus(instance.InstanceId, "stopped");
+                continue;
+            }
+
             // Queue kill command
             await _commandService.QueueKillCommand(
                 instance.AgentId,
@@ -227,7 +234,7 @@ public class ApplicationManager : IApplicationManager
     private async Task TriggerScaling(Application application)
     {
         var currentInstances = await _applicationRepository.GetApplicationInstances(application.Id);
-        var runningInstances = currentInstances.Count(i => i.Status == "Running");
+        var runningInstances = currentInstances.Count(i => i.Status == "running");
         
         if (runningInstances < application.DesiredInstances)
         {
@@ -249,12 +256,19 @@ public class ApplicationManager : IApplicationManager
             
             // Remove oldest instances
             var instancesToRemove = currentInstances
-                .Where(i => i.Status == "Running")
+                .Where(i => i.Status == "running")
                 .OrderBy(i => i.StartedAt)
                 .Take(excess);
             
             foreach (var instance in instancesToRemove)
             {
+                if (string.IsNullOrEmpty(instance.AgentId))
+                {
+                    _logger.LogWarning("Cannot scale down instance {InstanceId} as it has no assigned agent. Marking as stopped.", instance.InstanceId);
+                    await _applicationRepository.UpdateInstanceStatus(instance.InstanceId, "stopped");
+                    continue;
+                }
+
                 await _commandService.QueueKillCommand(
                     instance.AgentId,
                     instance.ApplicationId,

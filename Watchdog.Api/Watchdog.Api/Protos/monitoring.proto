@@ -148,6 +148,7 @@ message SpawnCommand {
   repeated PortMapping ports = 7;
   string health_check_url = 8;
   int32 health_check_interval = 9;
+  int32 instance_index = 10;
 }
 
 message KillCommand {
