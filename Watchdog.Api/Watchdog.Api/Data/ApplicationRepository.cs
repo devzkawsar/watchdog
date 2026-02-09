@@ -333,6 +333,77 @@ public class ApplicationRepository : IApplicationRepository
             AgentId = agentId
         });
     }
+
+
+    public async Task<IEnumerable<ApplicationInstance>> GetOrphanInstances(List<string> applicationIds)
+    {
+        if (applicationIds == null || !applicationIds.Any())
+        {
+            return Enumerable.Empty<ApplicationInstance>();
+        }
+
+        using var connection = _connectionFactory.CreateConnection();
+        
+        const string sql = @"
+            SELECT 
+                instance_id AS InstanceId, 
+                application_id AS ApplicationId, 
+                agent_id AS AgentId, 
+                process_id AS ProcessId,
+                status AS Status, 
+                cpu_percent AS CpuPercent, 
+                memory_mb AS MemoryMB, 
+                memory_percent AS MemoryPercent, 
+                thread_count AS ThreadCount, 
+                handle_count AS HandleCount,
+                assigned_port AS AssignedPort, 
+                last_health_check AS LastHealthCheck, 
+                last_heartbeat AS LastHeartbeat, 
+                started_at AS StartedAt, 
+                stopped_at AS StoppedAt, 
+                created_at AS CreatedAt, 
+                updated_at AS UpdatedAt
+            FROM application_instance
+            WHERE application_id IN @ApplicationIds 
+              AND agent_id IS NULL"; // Only claim active orphans
+
+        return await connection.QueryAsync<ApplicationInstance>(sql, new { ApplicationIds = applicationIds });
+    }
+
+    public async Task ClaimOrphanInstance(string oldInstanceId, string newInstanceId, string newAgentId)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+
+        
+        using var transaction = connection.BeginTransaction();
+        
+        try
+        {
+            await connection.ExecuteAsync("DELETE FROM heartbeat WHERE instance_id = @OldId", new { OldId = oldInstanceId }, transaction);
+            await connection.ExecuteAsync("DELETE FROM metrics_history WHERE instance_id = @OldId", new { OldId = oldInstanceId }, transaction);
+            
+            const string updateSql = @"
+                UPDATE application_instance 
+                SET instance_id = @NewId, 
+                    agent_id = @AgentId, 
+                    updated_at = GETUTCDATE() 
+                WHERE instance_id = @OldId";
+
+            await connection.ExecuteAsync(updateSql, new 
+            { 
+                OldId = oldInstanceId, 
+                NewId = newInstanceId, 
+                AgentId = newAgentId 
+            }, transaction);
+
+            transaction.Commit();
+        }
+        catch (Exception)
+        {
+            transaction.Rollback();
+            throw;
+        }
+    }
 }
 
 public class Application

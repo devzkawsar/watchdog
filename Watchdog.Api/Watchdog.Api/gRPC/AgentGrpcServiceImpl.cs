@@ -47,7 +47,6 @@ public class AgentGrpcServiceImpl : AgentService.AgentServiceBase
             _logger.LogInformation("Registering agent {AgentId} from {IpAddress}", 
                 request.AgentId, request.IpAddress);
             
-            // Register agent in database
             var agentRegistration = new AgentRegistration
             {
                 AgentId = request.AgentId,
@@ -91,7 +90,29 @@ public class AgentGrpcServiceImpl : AgentService.AgentServiceBase
                     });
                 }
             }
-            // Get active instances for this agent
+
+            var assignedAppIds = assignedApplications.Select(a => a.Id).ToList();
+            if (assignedAppIds.Any())
+            {
+                var orphanInstances = await _applicationRepository.GetOrphanInstances(assignedAppIds);
+                foreach (var orphan in orphanInstances)
+                {
+                    try
+                    {
+                        var newInstanceId = $"{request.Hostname}-{request.AgentName}-{Guid.NewGuid().ToString("N")}";
+                        
+                        _logger.LogInformation("Claiming orphan instance {OldId} as {NewId} for agent {agent}", 
+                            orphan.InstanceId, newInstanceId, agent.Id);
+                        
+                        await _applicationRepository.ClaimOrphanInstance(orphan.InstanceId, newInstanceId, agent.Id);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Failed to claim orphan instance {InstanceId}", orphan.InstanceId);
+                    }
+                }
+            }
+           
             var activeInstances = await _applicationRepository.GetActiveInstancesForAgent(agent.Id);
             var activeInstanceStatuses = activeInstances.Select(i => new Watchdog.Api.Protos.ApplicationStatus
             {

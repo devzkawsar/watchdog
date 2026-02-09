@@ -118,7 +118,8 @@ public class ScalingEngine : IScalingEngine
         {
             if (string.IsNullOrEmpty(instance.AgentId))
             {
-                _logger.LogWarning("Cannot scale down instance {InstanceId} as it has no assigned agent", instance.InstanceId);
+                _logger.LogWarning("Forcefully stopping orphan instance {InstanceId} (No Agent assigned)", instance.InstanceId);
+                await _applicationRepository.UpdateInstanceStatus(instance.InstanceId, "stopped");
                 continue;
             }
 

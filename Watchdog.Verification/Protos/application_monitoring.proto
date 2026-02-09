@@ -1,0 +1,72 @@
+syntax = "proto3";
+
+package Watchdog.Api;
+
+option csharp_namespace = "Watchdog.Api.Protos";
+
+service ApplicationMonitoringService {
+  rpc RegisterApplication (ApplicationRegistrationRequest) returns (ApplicationRegistrationResponse);
+  rpc Ready (ApplicationReadyRequest) returns (ApplicationReadyResponse);
+  rpc RecordHeartbeat (ApplicationHeartbeatRequest) returns (ApplicationHeartbeatResponse);
+  rpc RecordPerformanceMetric (PerformanceMetricRequest) returns (PerformanceMetricResponse);
+}
+
+message ApplicationRegistrationRequest {
+  string application_id = 1;
+  string instance_id = 2;
+  string application_name = 3;
+  int32 expected_heartbeat_interval_seconds = 4;
+  int64 registered_at_unix_seconds = 5;
+  string executable_path = 6;
+  string arguments = 7;
+  int32 application_type = 8;
+}
+
+message ApplicationRegistrationResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message ApplicationReadyRequest {
+  string application_id = 1;
+  string instance_id = 2;
+  int64 timestamp_unix_seconds = 3;
+  string message = 4;
+  int32 process_id = 5;
+  int32 assigned_port = 6;
+}
+
+message ApplicationReadyResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message ApplicationHeartbeatRequest {
+  string application_id = 1;
+  string instance_id = 2;
+  int64 timestamp_unix_seconds = 3;
+  bool is_healthy = 4;
+  string status = 5;
+  string message = 6;
+  string metrics_json = 7;
+}
+
+message ApplicationHeartbeatResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message PerformanceMetricRequest {
+  string application_id = 1;
+  string instance_id = 2;
+  int64 start_time_unix_seconds = 3;
+  int64 end_time_unix_seconds = 4;
+  int32 quantity = 5;
+  double delta = 6;
+  int64 recorded_at_unix_seconds = 7;
+}
+
+message PerformanceMetricResponse {
+  bool success = 1;
+  string message = 2;
+}

@@ -15,4 +15,6 @@ public interface IApplicationRepository
         double? cpuPercent = null, double? memoryMB = null, int? processId = null, string? agentId = null);
     Task<IEnumerable<ApplicationInstanceHeartbeatInfo>> GetStaleInstancesByHeartbeat();
     Task<int> UpdateInstanceStatusWithoutHeartbeat(string instanceId, string status);
+    Task<IEnumerable<ApplicationInstance>> GetOrphanInstances(List<string> applicationIds);
+    Task ClaimOrphanInstance(string oldInstanceId, string newInstanceId, string newAgentId);
 }
