@@ -26,13 +26,11 @@ public class ApplicationRepository : IApplicationRepository
                 arguments AS Arguments, 
                 working_directory AS WorkingDirectory,
                 application_type AS ApplicationType, 
-                health_check_url AS HealthCheckUrl, 
                 health_check_interval AS HealthCheckInterval, 
                 heartbeat_timeout AS HeartbeatTimeout,
                 desired_instances AS DesiredInstances, 
                 min_instances AS MinInstances, 
                 max_instances AS MaxInstances,
-                port_requirements AS PortRequirementsJson, 
                 environment_variables AS EnvironmentVariablesJson, 
                 auto_start AS AutoStart,
                 auto_start AS AutoStart,
@@ -48,12 +46,6 @@ public class ApplicationRepository : IApplicationRepository
         // Deserialize JSON fields
         foreach (var app in applications)
         {
-            if (!string.IsNullOrEmpty(app.PortRequirementsJson))
-            {
-                app.PortRequirements = JsonSerializer.Deserialize<List<PortRequirement>>(
-                    app.PortRequirementsJson) ?? new List<PortRequirement>();
-            }
-            
             if (!string.IsNullOrEmpty(app.EnvironmentVariablesJson))
             {
                 app.EnvironmentVariables = JsonSerializer.Deserialize<Dictionary<string, string>>(
@@ -77,13 +69,11 @@ public class ApplicationRepository : IApplicationRepository
                 arguments AS Arguments, 
                 working_directory AS WorkingDirectory,
                 application_type AS ApplicationType, 
-                health_check_url AS HealthCheckUrl, 
                 health_check_interval AS HealthCheckInterval, 
                 heartbeat_timeout AS HeartbeatTimeout,
                 desired_instances AS DesiredInstances, 
                 min_instances AS MinInstances, 
                 max_instances AS MaxInstances,
-                port_requirements AS PortRequirementsJson, 
                 environment_variables AS EnvironmentVariablesJson, 
                 auto_start AS AutoStart,
                 auto_start AS AutoStart,
@@ -98,12 +88,6 @@ public class ApplicationRepository : IApplicationRepository
         
         if (app != null)
         {
-            if (!string.IsNullOrEmpty(app.PortRequirementsJson))
-            {
-                app.PortRequirements = JsonSerializer.Deserialize<List<PortRequirement>>(
-                    app.PortRequirementsJson) ?? new List<PortRequirement>();
-            }
-            
             if (!string.IsNullOrEmpty(app.EnvironmentVariablesJson))
             {
                 app.EnvironmentVariables = JsonSerializer.Deserialize<Dictionary<string, string>>(
@@ -121,17 +105,16 @@ public class ApplicationRepository : IApplicationRepository
         const string sql = @"
             INSERT INTO application 
                 (id, name, display_name, executable_path, arguments, working_directory,
-                 application_type, health_check_url, health_check_interval, heartbeat_timeout,
+                 application_type,health_check_interval, heartbeat_timeout,
                  desired_instances, min_instances, max_instances,
-                 port_requirements, environment_variables, auto_start, created, created_by)
+                 environment_variables, auto_start, created, created_by)
             VALUES 
                 (@Id, @Name, @DisplayName, @ExecutablePath, @Arguments, @WorkingDirectory,
-                 @ApplicationType, @HealthCheckUrl, @HealthCheckInterval, @HeartbeatTimeout,
+                 @ApplicationType, @HealthCheckInterval, @HeartbeatTimeout,
                  @DesiredInstances, @MinInstances, @MaxInstances,
-                 @PortRequirementsJson, @EnvironmentVariablesJson, @AutoStart, GETUTCDATE(), NULL)";
+                 @EnvironmentVariablesJson, @AutoStart, GETUTCDATE(), NULL)";
         
         // Serialize JSON fields
-        application.PortRequirementsJson = JsonSerializer.Serialize(application.PortRequirements);
         application.EnvironmentVariablesJson = JsonSerializer.Serialize(application.EnvironmentVariables);
         
         return await connection.ExecuteAsync(sql, application);
@@ -149,21 +132,15 @@ public class ApplicationRepository : IApplicationRepository
                 arguments = @Arguments,
                 working_directory = @WorkingDirectory,
                 application_type = @ApplicationType,
-                health_check_url = @HealthCheckUrl,
                 health_check_interval = @HealthCheckInterval,
                 heartbeat_timeout = @HeartbeatTimeout,
                 desired_instances = @DesiredInstances,
                 min_instances = @MinInstances,
                 max_instances = @MaxInstances,
-                port_requirements = @PortRequirementsJson,
-                environment_variables = @EnvironmentVariablesJson,
-                auto_start = @AutoStart,
-                updated = GETUTCDATE(),
                 updated_by = NULL
             WHERE id = @Id";
         
         // Serialize JSON fields
-        application.PortRequirementsJson = JsonSerializer.Serialize(application.PortRequirements);
         application.EnvironmentVariablesJson = JsonSerializer.Serialize(application.EnvironmentVariables);
         
         return await connection.ExecuteAsync(sql, application);
@@ -415,13 +392,10 @@ public class Application
     public string Arguments { get; set; } = string.Empty;
     public string WorkingDirectory { get; set; } = string.Empty;
     public int ApplicationType { get; set; } // 0=Console, 1=Service, 2=IIS
-    public string HealthCheckUrl { get; set; } = string.Empty;
-    public int HealthCheckInterval { get; set; } = 30;
-    public int HeartbeatTimeout { get; set; } = 120;
     public int DesiredInstances { get; set; } = 1;
     public int MinInstances { get; set; } = 1;
     public int MaxInstances { get; set; } = 5;
-    public List<PortRequirement> PortRequirements { get; set; } = new();
+    public int HeartbeatTimeout { get; set; } = 120;
     public Dictionary<string, string> EnvironmentVariables { get; set; } = new();
     public bool AutoStart { get; set; } = true;
     public DateTime Created { get; set; }
@@ -430,7 +404,6 @@ public class Application
     public long? UpdatedBy { get; set; }
     
     // JSON serialized fields for database storage
-    public string PortRequirementsJson { get; set; } = string.Empty;
     public string EnvironmentVariablesJson { get; set; } = string.Empty;
 }
 
@@ -464,12 +437,4 @@ public class ApplicationInstanceHeartbeatInfo
     public DateTime? LastHeartbeat { get; set; }
     public int HealthCheckInterval { get; set; }
     public int HeartbeatTimeout { get; set; }
-}
-
-public class PortRequirement
-{
-    public string Name { get; set; } = string.Empty;
-    public int InternalPort { get; set; }
-    public string Protocol { get; set; } = "TCP";
-    public bool Required { get; set; } = true;
 }

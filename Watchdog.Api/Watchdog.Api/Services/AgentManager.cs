@@ -173,8 +173,8 @@ public class AgentManager : IAgentManager
         const string sql = @"
             IF NOT EXISTS (SELECT 1 FROM agent_application WHERE agent_id = @AgentId AND application_id = @ApplicationId)
             BEGIN
-                INSERT INTO agent_application (agent_id, application_id, current_instances_on_agent, assigned_at)
-                VALUES (@AgentId, @ApplicationId, 0, GETUTCDATE());
+                INSERT INTO agent_application (agent_id, application_id, assigned_at)
+                VALUES (@AgentId, @ApplicationId, GETUTCDATE());
             END";
         
         await connection.ExecuteAsync(sql, new
@@ -229,12 +229,10 @@ public class AgentManager : IAgentManager
                 a.arguments AS Arguments, 
                 a.working_directory AS WorkingDirectory,
                 a.application_type AS ApplicationType, 
-                a.health_check_url AS HealthCheckUrl, 
                 a.health_check_interval AS HealthCheckInterval,
                 a.desired_instances AS DesiredInstances, 
                 a.min_instances AS MinInstances, 
                 a.max_instances AS MaxInstances,
-                a.port_requirements AS PortRequirementsJson, 
                 a.environment_variables AS EnvironmentVariablesJson, 
                 a.auto_start AS AutoStart,
                 a.created AS CreatedAt, 
@@ -249,12 +247,6 @@ public class AgentManager : IAgentManager
         // Deserialize JSON fields
         foreach (var app in applications)
         {
-            if (!string.IsNullOrEmpty(app.PortRequirementsJson))
-            {
-                app.PortRequirements = JsonSerializer.Deserialize<List<PortRequirement>>(
-                    app.PortRequirementsJson) ?? new List<PortRequirement>();
-            }
-            
             if (!string.IsNullOrEmpty(app.EnvironmentVariablesJson))
             {
                 app.EnvironmentVariables = JsonSerializer.Deserialize<Dictionary<string, string>>(

@@ -6,7 +6,7 @@ namespace Watchdog.Agent.Interface;
 
 public interface IProcessManager
 {
-    Task<ProcessSpawnResult> SpawnProcess(SpawnCommand command, List<PortMapping> ports);
+    Task<ProcessSpawnResult> SpawnProcess(SpawnCommand command, int assignedPort);
     Task<bool> KillProcess(string instanceId, bool force = false, int timeoutSeconds = 30);
     Task<bool> RestartProcess(string instanceId, int timeoutSeconds = 30);
     Task<ProcessInfo?> GetProcessInfo(string instanceId);

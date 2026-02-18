@@ -71,25 +71,8 @@ public class AgentGrpcServiceImpl : AgentService.AgentServiceBase
                 WorkingDirectory = app.WorkingDirectory,
                 DesiredInstances = app.DesiredInstances,
                 EnvironmentVariables = { app.EnvironmentVariables },
-                HealthCheckUrl = app.HealthCheckUrl,
-                HealthCheckInterval = app.HealthCheckInterval
             }).ToList();
             
-            // Add port requirements
-            foreach (var assignment in applicationAssignments)
-            {
-                var app = assignedApplications.First(a => a.Id == assignment.ApplicationId);
-                foreach (var portReq in app.PortRequirements)
-                {
-                    assignment.Ports.Add(new Watchdog.Api.Protos.PortRequirement
-                    {
-                        Name = portReq.Name,
-                        InternalPort = portReq.InternalPort,
-                        Protocol = portReq.Protocol,
-                        Required = portReq.Required
-                    });
-                }
-            }
 
             var assignedAppIds = assignedApplications.Select(a => a.Id).ToList();
             if (assignedAppIds.Any())
@@ -494,7 +477,6 @@ public class AgentGrpcServiceImpl : AgentService.AgentServiceBase
                             ExternalPort = p.ExternalPort,
                             Protocol = p.Protocol
                         })},
-                        HealthCheckUrl = spawnParams.HealthCheckUrl,
                         HealthCheckInterval = spawnParams.HealthCheckInterval
                     };
                 }
@@ -544,7 +526,6 @@ public class SpawnCommandParams
     public string WorkingDirectory { get; set; } = string.Empty;
     public Dictionary<string, string> EnvironmentVariables { get; set; } = new();
     public List<PortMapping> Ports { get; set; } = new();
-    public string HealthCheckUrl { get; set; } = string.Empty;
     public int HealthCheckInterval { get; set; } = 30;
     public int InstanceIndex { get; set; }
 }

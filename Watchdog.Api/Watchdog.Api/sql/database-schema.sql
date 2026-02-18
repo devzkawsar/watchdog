@@ -51,16 +51,14 @@ CREATE TABLE application (
     working_directory VARCHAR(500),
     application_type INT NOT NULL DEFAULT 0,
     
-    health_check_url VARCHAR(500),
     health_check_interval INT DEFAULT 30,
     startup_timeout INT DEFAULT 180,
     heartbeat_timeout INT DEFAULT 120,
     
     desired_instances INT DEFAULT 1,
     min_instances INT DEFAULT 1,
-    max_instances INT DEFAULT 5,
+    max_instances INT DEFAULT 2,
     
-    port_requirements VARCHAR(MAX) DEFAULT '[]',
     environment_variables VARCHAR(MAX) DEFAULT '{}',
 
     auto_start BIT DEFAULT 1,
@@ -78,8 +76,7 @@ CREATE TABLE application (
     CONSTRAINT ck_applications_desired_instances CHECK (desired_instances >= 0),
     CONSTRAINT ck_applications_min_instances CHECK (min_instances >= 0),
     CONSTRAINT ck_applications_max_instances CHECK (max_instances >= min_instances),
-    CONSTRAINT ck_applications_health_check_interval CHECK (health_check_interval BETWEEN 5 AND 300),
-
+    CONSTRAINT ck_applications_health_check_interval CHECK (health_check_interval BETWEEN 5 AND 300)
 );
 
 -- =============================================
@@ -141,13 +138,8 @@ CREATE TABLE agent_application (
     agent_id VARCHAR(50) NOT NULL,
     application_id VARCHAR(50) NOT NULL,
     
-    max_instances_on_agent INT DEFAULT 10,
-    current_instances_on_agent INT DEFAULT 0,
     priority INT DEFAULT 0,
-    
-    prefer_this_agent BIT DEFAULT 0,
-    avoid_this_agent BIT DEFAULT 0,
-    
+
     assigned_at DATETIME2 DEFAULT GETUTCDATE(),
     assigned_by VARCHAR(100),
     last_assigned_instance DATETIME2,
@@ -224,7 +216,7 @@ CREATE TABLE command_queue (
     CONSTRAINT fk_command_application FOREIGN KEY (application_id) REFERENCES application(id),
     
     CONSTRAINT ck_command_type
-    CHECK (command_type IN ('spawn','kill','restart','update','stop_all')),
+    CHECK (command_type IN ('spawn','kill','restart','stop_all')),
     CONSTRAINT ck_command_status
     CHECK (status IN ('pending','sent','executing','completed','failed','cancelled'))
 );
@@ -264,42 +256,6 @@ CREATE TABLE metrics_history (
 );
 
 -- =============================================
--- 7. SCALING HISTORY TABLE (Auto-scaling Events)
--- =============================================
-CREATE TABLE scaling_history (
-    id BIGINT IDENTITY(1,1) PRIMARY KEY,
-
-    application_id VARCHAR(50) NOT NULL,
-    scaling_type VARCHAR(20) NOT NULL,
-    reason VARCHAR(500),
-
-    previous_instances INT NOT NULL,
-    target_instances INT NOT NULL,
-    actual_instances INT,
-
-    trigger_source VARCHAR(50),
-    trigger_value VARCHAR(100),
-
-    avg_cpu_percent DECIMAL(5,2),
-    avg_memory_percent DECIMAL(5,2),
-    healthy_instances INT,
-    unhealthy_instances INT,
-
-    triggered_at DATETIME2 DEFAULT GETUTCDATE(),
-    completed_at DATETIME2,
-
-    success BIT,
-    error_message VARCHAR(1000),
-
-    CONSTRAINT fk_scaling_application
-        FOREIGN KEY (application_id) REFERENCES application(id),
-
-    CONSTRAINT ck_scaling_type
-        CHECK (scaling_type IN ('scaleup','scaledown','maintain'))
-);
-
-
--- =============================================
 -- INDEXES FOR PERFORMANCE
 -- =============================================
 
@@ -336,7 +292,3 @@ CREATE INDEX ix_command_queue_instance_id ON command_queue (instance_id);
 CREATE INDEX ix_metrics_history_instance_timestamp ON metrics_history (instance_id, timestamp);
 CREATE INDEX ix_metrics_history_agent_timestamp ON metrics_history (agent_id, timestamp);
 CREATE INDEX ix_metrics_history_timestamp ON metrics_history (timestamp);
-
--- ScalingHistory indexes
-CREATE INDEX ix_scaling_history_application_id ON scaling_history (application_id);
-CREATE INDEX ix_scaling_history_triggered_at ON scaling_history (triggered_at);

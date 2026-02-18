@@ -98,7 +98,6 @@ public class AgentGrpcService : IAgentGrpcService
                             ExternalPort = p.ExternalPort,
                             Protocol = p.Protocol
                         }) },
-                        HealthCheckUrl = spawnParams.HealthCheckUrl,
                         HealthCheckInterval = spawnParams.HealthCheckInterval,
                         InstanceIndex = spawnParams.InstanceIndex
                     };

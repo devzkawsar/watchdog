@@ -1,6 +1,7 @@
 ﻿using System.ComponentModel.DataAnnotations;
 using  Watchdog.Api.Data;
 using Watchdog.Api.Interface;
+using Watchdog.Api.Request;
 
 namespace Watchdog.Api.Services;
 
@@ -46,13 +47,10 @@ public class ApplicationManager : IApplicationManager
             Arguments = request.Arguments ?? string.Empty,
             WorkingDirectory = request.WorkingDirectory ?? string.Empty,
             ApplicationType = request.ApplicationType,
-            HealthCheckUrl = request.HealthCheckUrl ?? string.Empty,
-            HealthCheckInterval = request.HealthCheckInterval,
             HeartbeatTimeout = request.HeartbeatTimeout,
             DesiredInstances = request.DesiredInstances,
             MinInstances = request.MinInstances,
             MaxInstances = request.MaxInstances,
-            PortRequirements = request.PortRequirements ?? new List<PortRequirement>(),
             EnvironmentVariables = request.EnvironmentVariables ?? new Dictionary<string, string>(),
             AutoStart = request.AutoStart
         };
@@ -85,13 +83,10 @@ public class ApplicationManager : IApplicationManager
         existing.Arguments = request.Arguments ?? existing.Arguments;
         existing.WorkingDirectory = request.WorkingDirectory ?? existing.WorkingDirectory;
         existing.ApplicationType = request.ApplicationType;
-        existing.HealthCheckUrl = request.HealthCheckUrl ?? existing.HealthCheckUrl;
-        existing.HealthCheckInterval = request.HealthCheckInterval;
         existing.HeartbeatTimeout = request.HeartbeatTimeout;
         existing.DesiredInstances = request.DesiredInstances;
         existing.MinInstances = request.MinInstances;
         existing.MaxInstances = request.MaxInstances;
-        existing.PortRequirements = request.PortRequirements ?? existing.PortRequirements;
         existing.EnvironmentVariables = request.EnvironmentVariables ?? existing.EnvironmentVariables;
         existing.AutoStart = request.AutoStart;
         
@@ -293,86 +288,5 @@ public class ApplicationManager : IApplicationManager
     }
 }
 
-public class CreateApplicationRequest
-{
-    public string? Id { get; set; }
-    
-    [Required]
-    public string Name { get; set; } = string.Empty;
-    
-    public string? DisplayName { get; set; }
-    
-    [Required]
-    public string ExecutablePath { get; set; } = string.Empty;
-    
-    public string? Arguments { get; set; }
-    
-    public string? WorkingDirectory { get; set; }
-    
-    [Range(0, 2)]
-    public int ApplicationType { get; set; } // 0=Console, 1=Service, 2=IIS
-    
-    public string? HealthCheckUrl { get; set; }
-    
-    [Range(5, 300)]
-    public int HealthCheckInterval { get; set; } = 30;
-    
-    [Range(5, 3600)]
-    public int HeartbeatTimeout { get; set; } = 120;
-    
-    [Range(0, 100)]
-    public int DesiredInstances { get; set; } = 1;
-    
-    [Range(0, 100)]
-    public int MinInstances { get; set; } = 1;
-    
-    [Range(1, 100)]
-    public int MaxInstances { get; set; } = 5;
-    
-    public List<PortRequirement>? PortRequirements { get; set; }
-    
-    public Dictionary<string, string>? EnvironmentVariables { get; set; }
-    
-    public bool AutoStart { get; set; } = true;
-}
 
-public class UpdateApplicationRequest
-{
-    [Required]
-    public string Name { get; set; } = string.Empty;
-    
-    public string? DisplayName { get; set; }
-    
-    [Required]
-    public string ExecutablePath { get; set; } = string.Empty;
-    
-    public string? Arguments { get; set; }
-    
-    public string? WorkingDirectory { get; set; }
-    
-    [Range(0, 2)]
-    public int ApplicationType { get; set; }
-    
-    public string? HealthCheckUrl { get; set; }
-    
-    [Range(5, 300)]
-    public int HealthCheckInterval { get; set; }
-    
-    [Range(5, 3600)]
-    public int HeartbeatTimeout { get; set; }
-    
-    [Range(0, 100)]
-    public int DesiredInstances { get; set; }
-    
-    [Range(0, 100)]
-    public int MinInstances { get; set; }
-    
-    [Range(1, 100)]
-    public int MaxInstances { get; set; }
-    
-    public List<PortRequirement>? PortRequirements { get; set; }
-    
-    public Dictionary<string, string>? EnvironmentVariables { get; set; }
-    
-    public bool AutoStart { get; set; }
-}
+

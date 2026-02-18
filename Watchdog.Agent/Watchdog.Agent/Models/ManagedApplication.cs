@@ -13,7 +13,7 @@ public class ManagedApplication
     public bool PersistWindowsService { get; set; }
     public ApplicationStatus Status { get; set; } = Enums.ApplicationStatus.Pending;
     public int? ProcessId { get; set; }
-    public List<PortMapping> Ports { get; set; } = new();
+    public int? AssignedPort { get; set; }
     public ProcessMetrics? Metrics { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? StartedAt { get; set; }

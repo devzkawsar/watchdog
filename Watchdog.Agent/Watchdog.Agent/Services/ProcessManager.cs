@@ -1572,16 +1572,16 @@ public class ProcessSpawnResult
     public bool Success { get; set; }
     public string? ErrorMessage { get; set; }
     public int? ProcessId { get; set; }
-    public List<PortMapping> Ports { get; set; } = new();
+    public int AssignedPort { get; set; }
     public DateTime StartTime { get; set; }
     
-    public static ProcessSpawnResult Succeeded(int processId, List<PortMapping> ports)
+    public static ProcessSpawnResult Succeeded(int processId, int assignedPort)
     {
         return new ProcessSpawnResult
         {
             Success = true,
             ProcessId = processId,
-            Ports = ports,
+            AssignedPort = assignedPort,
             StartTime = DateTime.UtcNow
         };
     }
@@ -1604,7 +1604,7 @@ public class ManagedProcess
     public string InstanceId { get; set; } = string.Empty;
     public string ApplicationId { get; set; } = string.Empty;
     public SpawnCommand? Command { get; set; }
-    public List<PortMapping> Ports { get; set; } = new();
+    public int AssignedPort { get; set; }
     public DateTime StartTime { get; set; }
     public StringBuilder OutputBuffer { get; set; } = new();
     public StringBuilder ErrorBuffer { get; set; } = new();
@@ -1624,7 +1624,7 @@ public class ProcessInfo
     public int ThreadCount { get; set; }
     public long HandleCount { get; set; }
     public DateTime StartTime { get; set; }
-    public List<PortMapping> Ports { get; set; } = new();
+    public int AssignedPort { get; set; }
     public string CommandLine { get; set; } = string.Empty;
     public string WorkingDirectory { get; set; } = string.Empty;
     public string? ErrorMessage { get; set; }

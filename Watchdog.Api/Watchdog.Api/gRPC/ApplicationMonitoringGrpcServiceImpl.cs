@@ -43,14 +43,14 @@ public class ApplicationMonitoringGrpcServiceImpl : ApplicationMonitoringService
         const string insertApplicationSql = @"
             INSERT INTO application
                 (id, name, display_name, executable_path, arguments, working_directory,
-                 application_type, health_check_url, health_check_interval, heartbeat_timeout,
+                 application_type,  health_check_interval, heartbeat_timeout,
                  desired_instances, min_instances, max_instances,
-                 port_requirements, environment_variables, auto_start, created, created_by)
+                 environment_variables, auto_start, created, created_by)
             VALUES
                 (@Id, @Name, @DisplayName, @ExecutablePath, '', '',
-                 0, '', 30, 120,
+                 0, 30, 120,
                  0, 0, 0,
-                 '[]', '{}', 0, GETUTCDATE(), NULL)";
+                 '{}', 0, GETUTCDATE(), NULL)";
 
         await connection.ExecuteAsync(insertApplicationSql, new
         {
@@ -80,12 +80,12 @@ public class ApplicationMonitoringGrpcServiceImpl : ApplicationMonitoringService
                         (id, name, display_name, executable_path, arguments, working_directory,
                          application_type, health_check_url, health_check_interval, heartbeat_timeout,
                          desired_instances, min_instances, max_instances,
-                         port_requirements, environment_variables, auto_start, created, created_by)
+                         environment_variables, auto_start, created, created_by)
                     VALUES
                         (@Id, @Name, @DisplayName, @ExecutablePath, @Arguments, '',
-                         @ApplicationType, '', @HealthCheckInterval, @HeartbeatTimeout,
+                         @ApplicationType, @HealthCheckInterval, @HeartbeatTimeout,
                          0, 0, 0,
-                         '[]', '{}', 0, GETUTCDATE(), NULL)";
+                         '{}', 0, GETUTCDATE(), NULL)";
 
                 var heartbeatTimeout = Math.Max(30, request.ExpectedHeartbeatIntervalSeconds * 2);
                 var healthCheckInterval = Math.Max(5, request.ExpectedHeartbeatIntervalSeconds);

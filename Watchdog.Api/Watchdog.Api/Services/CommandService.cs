@@ -35,12 +35,6 @@ public class CommandService : ICommandService
     {
         using var connection = _connectionFactory.CreateConnection();
         
-        // Allocate ports if needed
-        List<PortAssignment> ports = new();
-        if (application.PortRequirements != null && application.PortRequirements.Any())
-        {
-            ports = await _networkManager.AllocatePorts(agentId, application.PortRequirements.Count);
-        }
         
         var commandId = Guid.NewGuid().ToString();
         var parameters = new SpawnCommandParams
@@ -49,14 +43,7 @@ public class CommandService : ICommandService
             Arguments = application.Arguments,
             WorkingDirectory = application.WorkingDirectory,
             EnvironmentVariables = application.EnvironmentVariables,
-            Ports = ports.Select(p => new PortMapping
-            {
-                Name = p.Name,
-                InternalPort = p.InternalPort,
-                ExternalPort = p.ExternalPort,
-                Protocol = p.Protocol
-            }).ToList(),
-            HealthCheckUrl = application.HealthCheckUrl,
+            Ports = new List<PortMapping>(),
             InstanceIndex = instanceIndex
         };
         

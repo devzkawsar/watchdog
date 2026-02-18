@@ -1,4 +1,5 @@
 using Watchdog.Api.Data;
+using Watchdog.Api.Request;
 using Watchdog.Api.Services;
 
 namespace Watchdog.Api.Interface;

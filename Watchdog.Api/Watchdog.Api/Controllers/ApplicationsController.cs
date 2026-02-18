@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Watchdog.Api.Data;
 using Watchdog.Api.Interface;
+using Watchdog.Api.Request;
 using Watchdog.Api.Services;
 
 namespace Watchdog.Api.Controllers;

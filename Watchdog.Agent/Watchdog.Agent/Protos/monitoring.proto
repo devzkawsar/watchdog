@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package Watchdog.Api;
 
-option csharp_namespace = "Watchdog.Agent.Protos";
+option csharp_namespace = "Watchdog.Api.Protos";
 
 // Service for agents to connect to
 service AgentService {
@@ -14,9 +14,12 @@ service AgentService {
 
   // Bi-directional stream for real-time communication
   rpc CommandStream (stream AgentMessage) returns (stream ControlPlaneMessage);
+
+  // Execute specific command
+  rpc ExecuteCommand (CommandRequest) returns (CommandResponse);
 }
 
-// Messages for agent -> control plane
+// Agent -> Control Plane messages
 message AgentRegistrationRequest {
   string agent_id = 1;
   string agent_name = 2;
@@ -43,13 +46,14 @@ message AgentMessage {
   }
 }
 
-// Messages for control plane -> agent
+// Control Plane -> Agent messages
 message ControlPlaneMessage {
   oneof message {
     SpawnCommand spawn = 1;
     KillCommand kill = 2;
     RestartCommand restart = 3;
     UpdateCommand update = 4;
+    HealthCheckRequest health_check = 5;
   }
 }
 
@@ -74,10 +78,18 @@ message ApplicationStatus {
   string status = 3;  // Running, Stopped, Starting, Error
   double cpu_percent = 4;
   double memory_mb = 5;
-  repeated PortMapping ports = 6;
+  int32 assigned_port = 6;
   string health_status = 7;  // Healthy, Unhealthy, Unknown
   int64 start_time = 8;
   string process_id = 9;
+}
+
+message SystemMetrics {
+  double cpu_percent = 1;
+  double memory_percent = 2;
+  double disk_percent = 3;
+  int32 total_processes = 4;
+  int64 uptime_seconds = 5;
 }
 
 message ApplicationAssignment {
@@ -87,24 +99,28 @@ message ApplicationAssignment {
   string arguments = 4;
   string working_directory = 5;
   int32 desired_instances = 6;
-  repeated PortRequirement ports = 7;
   map<string, string> environment_variables = 8;
-  string health_check_url = 9;
   int32 health_check_interval = 10;
 }
 
-message PortRequirement {
-  string name = 1;
-  int32 internal_port = 2;
-  string protocol = 3;  // TCP, UDP
-  bool required = 4;
+
+
+message CommandRequest {
+  string command_id = 1;
+  string command_type = 2;  // SPAWN, KILL, RESTART, UPDATE
+  string application_id = 3;
+  string instance_id = 4;
+  string parameters = 5;  // JSON
+  int64 timestamp = 6;
+  string agent_id = 7;
 }
 
-message PortMapping {
-  string name = 1;
-  int32 internal_port = 2;
-  int32 external_port = 3;
-  string protocol = 4;
+message CommandResponse {
+  string command_id = 1;
+  bool success = 2;
+  string message = 3;
+  string result = 4;  // JSON
+  int64 timestamp = 7;
 }
 
 // Command messages
@@ -115,8 +131,7 @@ message SpawnCommand {
   string arguments = 4;
   string working_directory = 5;
   map<string, string> environment_variables = 6;
-  repeated PortMapping ports = 7;
-  string health_check_url = 8;
+  optional int32 port = 7;
   int32 health_check_interval = 9;
   int32 instance_index = 10;
 }
@@ -137,16 +152,6 @@ message UpdateCommand {
   map<string, string> environment_variables = 2;
 }
 
-message CommandRequest {
-  string command_id = 1;
-  string command_type = 2;  // SPAWN, KILL, RESTART, UPDATE
-  string application_id = 3;
-  string instance_id = 4;
-  string parameters = 5;  // JSON
-  int64 timestamp = 6;
-  string agent_id = 7;
-}
-
 // Status messages
 message Heartbeat {
   string agent_id = 1;
@@ -157,7 +162,7 @@ message ApplicationSpawned {
   string instance_id = 1;
   string application_id = 2;
   int32 process_id = 3;
-  repeated PortMapping ports = 4;
+  int32 assigned_port = 4;
   int64 start_time = 5;
 }
 
@@ -179,10 +184,7 @@ message ErrorReport {
   string application_id = 7;
 }
 
-message SystemMetrics {
-  double cpu_percent = 1;
-  double memory_percent = 2;
-  double disk_percent = 3;
-  int32 total_processes = 4;
-  int64 uptime_seconds = 5;
+message HealthCheckRequest {
+  string agent_id = 1;
+  int64 timestamp = 2;
 }
