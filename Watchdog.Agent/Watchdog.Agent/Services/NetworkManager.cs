@@ -89,23 +89,6 @@ public class NetworkManager : INetworkManagerInternal
         }
     }
     
-    public Task<bool> ReleasePorts(List<int> ports)
-    {
-        lock (_lock)
-        {
-            var releasedCount = 0;
-            foreach (var port in ports)
-            {
-                if (_allocatedPorts.Remove(port))
-                {
-                    releasedCount++;
-                }
-            }
-            
-            _logger.LogDebug("Released {Count} ports", releasedCount);
-            return Task.FromResult(releasedCount > 0);
-        }
-    }
     
     public Task<List<int>> GetAvailablePorts()
     {

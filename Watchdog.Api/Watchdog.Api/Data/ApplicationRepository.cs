@@ -37,7 +37,8 @@ public class ApplicationRepository : IApplicationRepository
                 created AS Created,
                 updated AS Updated,
                 created_by AS CreatedBy,
-                updated_by AS UpdatedBy
+                updated_by AS UpdatedBy,
+                built_in_port AS BuiltInPort
             FROM application
             ORDER BY name";
         
@@ -80,7 +81,8 @@ public class ApplicationRepository : IApplicationRepository
                 created AS Created,
                 updated AS Updated,
                 created_by AS CreatedBy,
-                updated_by AS UpdatedBy
+                updated_by AS UpdatedBy,
+                built_in_port AS BuiltInPort
             FROM application
             WHERE id = @Id";
         
@@ -105,14 +107,14 @@ public class ApplicationRepository : IApplicationRepository
         const string sql = @"
             INSERT INTO application 
                 (id, name, display_name, executable_path, arguments, working_directory,
-                 application_type,health_check_interval, heartbeat_timeout,
+                 application_type, heartbeat_timeout,
                  desired_instances, min_instances, max_instances,
-                 environment_variables, auto_start, created, created_by)
+                 environment_variables, auto_start, built_in_port, created, created_by)
             VALUES 
                 (@Id, @Name, @DisplayName, @ExecutablePath, @Arguments, @WorkingDirectory,
-                 @ApplicationType, @HealthCheckInterval, @HeartbeatTimeout,
+                 @ApplicationType,  @HeartbeatTimeout,
                  @DesiredInstances, @MinInstances, @MaxInstances,
-                 @EnvironmentVariablesJson, @AutoStart, GETUTCDATE(), NULL)";
+                 @EnvironmentVariablesJson, @AutoStart, @BuiltInPort, GETUTCDATE(), NULL)";
         
         // Serialize JSON fields
         application.EnvironmentVariablesJson = JsonSerializer.Serialize(application.EnvironmentVariables);
@@ -137,6 +139,7 @@ public class ApplicationRepository : IApplicationRepository
                 desired_instances = @DesiredInstances,
                 min_instances = @MinInstances,
                 max_instances = @MaxInstances,
+                built_in_port = @BuiltInPort,
                 updated_by = NULL
             WHERE id = @Id";
         
@@ -402,6 +405,7 @@ public class Application
     public DateTime? Updated { get; set; }
     public long? CreatedBy { get; set; }
     public long? UpdatedBy { get; set; }
+    public int? BuiltInPort { get; set; }
     
     // JSON serialized fields for database storage
     public string EnvironmentVariablesJson { get; set; } = string.Empty;

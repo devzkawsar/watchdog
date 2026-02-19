@@ -9,7 +9,7 @@ using Microsoft.Extensions.Options;
 using Watchdog.Agent.Configuration;
 using Watchdog.Agent.Interface;
 using Watchdog.Agent.Models;
-using Watchdog.Agent.Protos;
+using Watchdog.Api.Protos;
 using ApplicationStatus = Watchdog.Agent.Enums.ApplicationStatus;
 
 namespace Watchdog.Agent.Services;
@@ -573,11 +573,11 @@ public class GrpcClient : IGrpcClientInternal
         // Create application instance
         var instance = await _applicationManager.CreateApplicationInstance(command);
         
-        // Ports are provided as PortMapping in the control-plane contract
-        var ports = command.Ports.ToList();
+        // Port is provided in the control-plane contract
+        int assignedPort = command.Port;
         
         // Spawn process
-        var result = await _processManager.SpawnProcess(command, ports);
+        var result = await _processManager.SpawnProcess(command, assignedPort);
         
         if (result.Success)
         {
@@ -586,7 +586,7 @@ public class GrpcClient : IGrpcClientInternal
                 command.InstanceId,
                 Enums.ApplicationStatus.Running,
                 result.ProcessId,
-                result.Ports);
+                result.AssignedPort);
             
             // Report success to control plane
             await SendApplicationSpawned(new ApplicationSpawned
@@ -594,7 +594,7 @@ public class GrpcClient : IGrpcClientInternal
                 InstanceId = command.InstanceId,
                 ApplicationId = command.ApplicationId,
                 ProcessId = result.ProcessId ?? 0,
-                Ports = { result.Ports },
+                AssignedPort = result.AssignedPort,
                 StartTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
             }, cancellationToken);
             

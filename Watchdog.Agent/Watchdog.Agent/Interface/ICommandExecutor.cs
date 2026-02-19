@@ -1,4 +1,4 @@
-using Watchdog.Agent.Protos;
+using Watchdog.Api.Protos;
 
 namespace Watchdog.Agent.Interface;
 

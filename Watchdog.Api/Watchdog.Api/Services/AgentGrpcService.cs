@@ -90,14 +90,7 @@ public class AgentGrpcService : IAgentGrpcService
                         ExecutablePath = spawnParams.ExecutablePath,
                         Arguments = spawnParams.Arguments,
                         WorkingDirectory = spawnParams.WorkingDirectory,
-                        EnvironmentVariables = { spawnParams.EnvironmentVariables },
-                        Ports = { spawnParams.Ports.Select(p => new PortMapping
-                        {
-                            Name = p.Name,
-                            InternalPort = p.InternalPort,
-                            ExternalPort = p.ExternalPort,
-                            Protocol = p.Protocol
-                        }) },
+                        Port = spawnParams.Port,
                         HealthCheckInterval = spawnParams.HealthCheckInterval,
                         InstanceIndex = spawnParams.InstanceIndex
                     };

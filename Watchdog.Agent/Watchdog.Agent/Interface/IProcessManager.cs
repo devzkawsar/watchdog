@@ -1,5 +1,5 @@
 using Watchdog.Agent.Models;
-using Watchdog.Agent.Protos;
+using Watchdog.Api.Protos;
 using Watchdog.Agent.Services;
 
 namespace Watchdog.Agent.Interface;

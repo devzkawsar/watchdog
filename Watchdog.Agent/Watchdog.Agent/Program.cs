@@ -2,7 +2,7 @@ using Microsoft.Extensions.Options;
 using System.Runtime.Versioning;
 using Watchdog.Agent.Configuration;
 using Watchdog.Agent.Interface;
-using Watchdog.Agent.Protos;
+using Watchdog.Api.Protos;
 using Watchdog.Agent.Services;
 using Watchdog.Agent.WindowsService;
 using ConfigurationManager = Watchdog.Agent.Services.ConfigurationManager;

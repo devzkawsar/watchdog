@@ -1,4 +1,4 @@
-using Watchdog.Agent.Protos;
+using Watchdog.Api.Protos;
 using ApplicationStatus = Watchdog.Agent.Enums.ApplicationStatus;
 
 namespace Watchdog.Agent.Models;

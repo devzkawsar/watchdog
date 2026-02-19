@@ -10,7 +10,8 @@ using Microsoft.Extensions.Options;
 using Watchdog.Agent.Configuration;
 using Watchdog.Agent.Interface;
 using Watchdog.Agent.Models;
-using Watchdog.Agent.Protos;
+using Watchdog.Api.Protos;
+using ApplicationStatus = Watchdog.Agent.Enums.ApplicationStatus;
 
 namespace Watchdog.Agent.Services;
 
@@ -44,17 +45,20 @@ public class ProcessManager : IProcessManagerInternal
         _agentSettings = agentSettings;
     }
 
-    public async Task<ProcessSpawnResult> SpawnProcess(SpawnCommand command, List<PortMapping> ports)
+    public async Task<ProcessSpawnResult> SpawnProcess(SpawnCommand command, int assignedPort)
     {
         var stopwatch = Stopwatch.StartNew();
+        int finalPort = 0;
 
         try
         {
             if (OperatingSystem.IsWindows() && ShouldRunAsWindowsService(command))
             {
-                var result = await SpawnWindowsService(command, ports);
-                stopwatch.Stop();
-                return result;
+                // Windows service spawning might need adjustment, taking just the port for now
+                // Assuming SpawnWindowsService is/will be updated or we handle it here
+                 var result = await SpawnWindowsService(command, assignedPort);
+                 stopwatch.Stop();
+                 return result;
             }
 
             // 1. Check if instance is already managed and running
@@ -73,9 +77,7 @@ public class ProcessManager : IProcessManagerInternal
                                 "Instance {InstanceId} is already managed and running. Skipping spawn.",
                                 command.InstanceId);
 
-                            // Ensure ports are synchronized if they changed in the command 
-                            // (though typically they shouldn't for a running instance)
-                            return ProcessSpawnResult.Succeeded(existingManaged.ProcessId, existingManaged.Ports);
+                            return ProcessSpawnResult.Succeeded(existingManaged.ProcessId, existingManaged.AssignedPort);
                         }
 
                         _logger.LogWarning(
@@ -109,10 +111,10 @@ public class ProcessManager : IProcessManagerInternal
 
                         // Update command with latest if it was rebuilt from sync
                         instance.Command = command;
-                        instance.Ports = ports;
+                        instance.AssignedPort = assignedPort;
 
                         await RegisterManagedProcessAsync(instance, orphanedProcess);
-                        return ProcessSpawnResult.Succeeded(orphanedProcess.Id, ports);
+                        return ProcessSpawnResult.Succeeded(orphanedProcess.Id, assignedPort);
                     }
                 }
                 catch (Exception ex)
@@ -125,6 +127,13 @@ public class ProcessManager : IProcessManagerInternal
             _logger.LogInformation(
                 "Spawning process for application {AppId} instance {InstanceId}",
                 command.ApplicationId, command.InstanceId);
+            
+            // Allocate port
+            finalPort = await _networkManager.AllocatePort(assignedPort);
+            if (finalPort == 0)
+            {
+                throw new Exception($"Failed to allocate port (requested: {assignedPort})");
+            }
 
             // Create process directory
             var instanceDir = Path.Combine(_agentSettings.Value.WorkingDirectory, command.InstanceId);
@@ -135,10 +144,10 @@ public class ProcessManager : IProcessManagerInternal
             var stderrPath = Path.Combine(instanceDir, "stderr.log");
 
             // Build environment variables
-            var envVars = BuildEnvironmentVariables(command, ports, instanceDir);
+            var envVars = BuildEnvironmentVariables(command, finalPort, instanceDir);
 
             // Build command line arguments
-            var arguments = BuildCommandLineArguments(command, ports);
+            var arguments = BuildCommandLineArguments(command, finalPort);
 
             // Create process start info
             var startInfo = new ProcessStartInfo
@@ -264,7 +273,7 @@ public class ProcessManager : IProcessManagerInternal
                 ProcessId = process.Id,
                 InstanceId = command.InstanceId,
                 ApplicationId = command.ApplicationId,
-                Ports = ports,
+                AssignedPort = finalPort,
                 StartTime = DateTime.UtcNow,
                 Command = command,
                 OutputBuffer = new StringBuilder(),
@@ -282,7 +291,7 @@ public class ProcessManager : IProcessManagerInternal
                 "Successfully spawned process {ProcessId} for instance {InstanceId} in {ElapsedMs}ms",
                 process.Id, command.InstanceId, stopwatch.ElapsedMilliseconds);
 
-            return ProcessSpawnResult.Succeeded(process.Id, ports);
+            return ProcessSpawnResult.Succeeded(process.Id, finalPort);
         }
         catch (Exception ex)
         {
@@ -292,11 +301,10 @@ public class ProcessManager : IProcessManagerInternal
                 "Failed to spawn process for instance {InstanceId} after {ElapsedMs}ms", 
                 command.InstanceId, stopwatch.ElapsedMilliseconds);
 
-            // Release allocated ports on failure
-            if (ports.Any())
+            // Release allocated port on failure
+            if (finalPort > 0)
             {
-                var portNumbers = ports.Select(p => p.ExternalPort).ToList();
-                await _networkManager.ReleasePorts(portNumbers);
+                await _networkManager.ReleasePort(finalPort);
             }
 
             return ProcessSpawnResult.Failed(ex.Message);
@@ -490,7 +498,7 @@ public class ProcessManager : IProcessManagerInternal
             }
 
             SpawnCommand? savedCommand = null;
-            List<PortMapping> savedPorts = new();
+            int savedPort = 0;
 
             // Get the managed process
             if (_managedProcesses.TryGetValue(instanceId, out var managedProcess))
@@ -502,7 +510,7 @@ public class ProcessManager : IProcessManagerInternal
                 await Task.Delay(2000);
 
                 savedCommand = managedProcess.Command;
-                savedPorts = managedProcess.Ports;
+                savedPort = managedProcess.AssignedPort;
             }
             else
             {
@@ -517,7 +525,7 @@ public class ProcessManager : IProcessManagerInternal
                 }
 
                 savedCommand = savedInstance.Command;
-                savedPorts = savedInstance.Ports;
+                savedPort = savedInstance.AssignedPort ?? 0;
             }
 
             if (savedCommand == null)
@@ -527,7 +535,7 @@ public class ProcessManager : IProcessManagerInternal
             }
 
             // Spawn new process
-            var result = await SpawnProcess(savedCommand, savedPorts);
+            var result = await SpawnProcess(savedCommand, savedPort);
 
             return result.Success;
         }
@@ -566,7 +574,7 @@ public class ProcessManager : IProcessManagerInternal
                 InstanceId = instance.InstanceId,
                 ApplicationId = instance.ApplicationId,
                 Command = instance.Command,
-                Ports = instance.Ports ?? new List<PortMapping>(),
+                AssignedPort = instance.AssignedPort ?? 0,
                 StartTime = instance.StartedAt ?? DateTime.UtcNow,
                 StdOutPath = string.Empty,
                 StdErrPath = string.Empty
@@ -886,7 +894,7 @@ public class ProcessManager : IProcessManagerInternal
             InstanceId = instance.InstanceId,
             ApplicationId = instance.ApplicationId,
             Command = instance.Command,
-            Ports = instance.Ports ?? new List<PortMapping>(),
+            AssignedPort = instance.AssignedPort ?? 0,
             StartTime = instance.StartedAt ?? DateTime.UtcNow,
             StdOutPath = string.Empty,
             StdErrPath = string.Empty
@@ -911,7 +919,7 @@ public class ProcessManager : IProcessManagerInternal
 
     private Dictionary<string, string> BuildEnvironmentVariables(
         SpawnCommand command, 
-        List<PortMapping> ports, 
+        int assignedPort, 
         string instanceDir)
     {
         var envVars = new Dictionary<string, string>();
@@ -923,22 +931,10 @@ public class ProcessManager : IProcessManagerInternal
         }
 
         // Add port mappings
-        for (int i = 0; i < ports.Count; i++)
+        if (assignedPort > 0)
         {
-            var port = ports[i];
-            envVars[$"PORT_{i}"] = port.ExternalPort.ToString();
-
-            if (!string.IsNullOrEmpty(port.Name))
-            {
-                envVars[$"PORT_{port.Name.ToUpper()}"] = port.ExternalPort.ToString();
-            }
-        }
-
-        // Add all ports as comma-separated list
-        if (ports.Any())
-        {
-            envVars["PORTS"] = string.Join(",", ports.Select(p => p.ExternalPort));
-            envVars["PORT_LIST"] = string.Join(";", ports.Select(p => $"{p.Name}:{p.ExternalPort}"));
+            envVars["PORT"] = assignedPort.ToString();
+            envVars["PORT_0"] = assignedPort.ToString();
         }
 
         // Add directory paths
@@ -953,24 +949,15 @@ public class ProcessManager : IProcessManagerInternal
         return envVars;
     }
 
-    private string BuildCommandLineArguments(SpawnCommand command, List<PortMapping> ports)
+    private string BuildCommandLineArguments(SpawnCommand command, int assignedPort)
     {
         var arguments = command.Arguments;
 
         // Replace port placeholders
-        if (ports.Any())
+        if (assignedPort > 0)
         {
-            for (int i = 0; i < ports.Count; i++)
-            {
-                var port = ports[i];
-                arguments = arguments.Replace($"${{PORT_{i}}}", port.ExternalPort.ToString());
-
-                if (!string.IsNullOrEmpty(port.Name))
-                {
-                    arguments = arguments.Replace($"${{PORT_{port.Name}}}", port.ExternalPort.ToString());
-                    arguments = arguments.Replace($"${{PORT_{port.Name.ToUpper()}}}", port.ExternalPort.ToString());
-                }
-            }
+            arguments = arguments.Replace("${PORT}", assignedPort.ToString());
+            arguments = arguments.Replace("${PORT_0}", assignedPort.ToString());
         }
 
         // Replace other placeholders
@@ -1036,7 +1023,7 @@ public class ProcessManager : IProcessManagerInternal
     }
 
     [SupportedOSPlatform("windows")]
-    private async Task<ProcessSpawnResult> SpawnWindowsService(SpawnCommand command, List<PortMapping> ports)
+    private async Task<ProcessSpawnResult> SpawnWindowsService(SpawnCommand command, int assignedPort)
     {
         var serviceName = GetWindowsServiceName(command);
 
@@ -1047,13 +1034,13 @@ public class ProcessManager : IProcessManagerInternal
         var instanceDir = Path.Combine(_agentSettings.Value.WorkingDirectory, command.InstanceId);
         Directory.CreateDirectory(instanceDir);
 
-        var envVars = BuildEnvironmentVariables(command, ports, instanceDir);
+        var envVars = BuildEnvironmentVariables(command, assignedPort, instanceDir);
         envVars["WATCHDOG_INSTANCE_ID"] = command.InstanceId;
         envVars["WATCHDOG_AGENT_ID"] = _agentSettings.Value.AgentId;
         envVars["WATCHDOG_APP_ID"] = command.ApplicationId;
         envVars["WATCHDOG_INSTANCE_INDEX"] = command.InstanceIndex.ToString();
 
-        var arguments = BuildCommandLineArguments(command, ports);
+        var arguments = BuildCommandLineArguments(command, assignedPort);
         var binPath = BuildServiceBinPath(command.ExecutablePath, arguments);
 
         var configured = await EnsureWindowsServiceConfigured(serviceName, binPath);
@@ -1096,7 +1083,7 @@ public class ProcessManager : IProcessManagerInternal
             // Ignore
         }
 
-        return ProcessSpawnResult.Succeeded(pid.Value, ports);
+        return ProcessSpawnResult.Succeeded(pid.Value, assignedPort);
     }
 
     private static string BuildServiceBinPath(string executablePath, string arguments)
@@ -1349,10 +1336,9 @@ public class ProcessManager : IProcessManagerInternal
             _processIdToInstanceId.TryRemove(managedProcess.ProcessId, out _);
             
             // Release ports
-            if (managedProcess.Ports.Any())
+            if (managedProcess.AssignedPort > 0)
             {
-                var portNumbers = managedProcess.Ports.Select(p => p.ExternalPort).ToList();
-                await _networkManager.ReleasePorts(portNumbers);
+                await _networkManager.ReleasePort(managedProcess.AssignedPort);
             }
             
             // Dispose process
@@ -1398,7 +1384,7 @@ public class ProcessManager : IProcessManagerInternal
                 Status = process.HasExited ? "Exited" : "Running",
                 ExitCode = process.HasExited ? process.ExitCode : null,
                 StartTime = managedProcess.StartTime,
-                Ports = managedProcess.Ports,
+                AssignedPort = managedProcess.AssignedPort,
                 CommandLine = $"{managedProcess.Command?.ExecutablePath} {managedProcess.Command?.Arguments}",
                 WorkingDirectory = process.StartInfo.WorkingDirectory
             };

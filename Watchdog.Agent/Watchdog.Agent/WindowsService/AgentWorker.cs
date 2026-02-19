@@ -2,7 +2,7 @@ using Watchdog.Agent.Configuration;
 using Watchdog.Agent.Services;
 using Microsoft.Extensions.Options;
 using Watchdog.Agent.Interface;
-using Watchdog.Agent.Protos;
+using Watchdog.Api.Protos;
 
 
 namespace Watchdog.Agent.WindowsService;

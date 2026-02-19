@@ -99,6 +99,7 @@ message ApplicationAssignment {
   string arguments = 4;
   string working_directory = 5;
   int32 desired_instances = 6;
+  optional int32 built_in_port = 7;
   map<string, string> environment_variables = 8;
   int32 health_check_interval = 10;
 }

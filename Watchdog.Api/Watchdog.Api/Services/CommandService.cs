@@ -12,18 +12,15 @@ public class CommandService : ICommandService
 {
     private readonly IDbConnectionFactory _connectionFactory;
     private readonly IAgentGrpcService _agentGrpcService;
-    private readonly INetworkManager _networkManager;
     private readonly ILogger<CommandService> _logger;
     
     public CommandService(
         IDbConnectionFactory connectionFactory,
         IAgentGrpcService agentGrpcService,
-        INetworkManager networkManager,
         ILogger<CommandService> logger)
     {
         _connectionFactory = connectionFactory;
         _agentGrpcService = agentGrpcService;
-        _networkManager = networkManager;
         _logger = logger;
     }
     
@@ -34,8 +31,6 @@ public class CommandService : ICommandService
         int instanceIndex)
     {
         using var connection = _connectionFactory.CreateConnection();
-        
-        
         var commandId = Guid.NewGuid().ToString();
         var parameters = new SpawnCommandParams
         {
@@ -43,7 +38,7 @@ public class CommandService : ICommandService
             Arguments = application.Arguments,
             WorkingDirectory = application.WorkingDirectory,
             EnvironmentVariables = application.EnvironmentVariables,
-            Ports = new List<PortMapping>(),
+            Port = application.BuiltInPort ?? 0,
             InstanceIndex = instanceIndex
         };
         
@@ -335,19 +330,13 @@ public class CommandService : ICommandService
                                  @AssignedPort, @StartedAt, GETUTCDATE(), GETUTCDATE(), GETUTCDATE())
                         END";
                     
-                    int assignedPort = 0;
-                    if (spawnResult.Ports != null && spawnResult.Ports.Count > 0)
-                    {
-                        assignedPort = spawnResult.Ports[0].ExternalPort;
-                    }
-
                     await connection.ExecuteAsync(updateInstanceSql, new
                     {
                         InstanceId = command.InstanceId,
                         ApplicationId = command.ApplicationId,
                         AgentId = command.AgentId,
                         ProcessId = spawnResult.ProcessId,
-                        AssignedPort = assignedPort,
+                        AssignedPort = spawnResult.AssignedPort,
                         StartedAt = spawnResult.StartTime
                     });
                     
@@ -365,141 +354,24 @@ public class CommandService : ICommandService
     }
 }
 
-// Missing NetworkManager service
-public interface INetworkManager
-{
-    Task<List<PortAssignment>> AllocatePorts(string agentId, int portCount);
-    Task<bool> ReleasePorts(string agentId, List<int> ports);
-}
-
-public class NetworkManager : INetworkManager
-{
-    private readonly IDbConnectionFactory _connectionFactory;
-    private readonly ILogger<NetworkManager> _logger;
-    
-    public NetworkManager(
-        IDbConnectionFactory connectionFactory,
-        ILogger<NetworkManager> logger)
-    {
-        _connectionFactory = connectionFactory;
-        _logger = logger;
-    }
-    
-    public async Task<List<PortAssignment>> AllocatePorts(string agentId, int portCount)
-    {
-        using var connection = _connectionFactory.CreateConnection();
-        
-        // Get agent's available ports (using tags column as storage for now, or just empty)
-        // Note: New schema removed AvailablePorts. We will use tags to store it if needed or just generate.
-        const string getPortsSql = @"
-            SELECT tags FROM agent WHERE id = @AgentId";
-        
-        var portsJson = await connection.ExecuteScalarAsync<string>(getPortsSql, new { AgentId = agentId });
-        var availablePorts = new List<int>();
-        try 
-        {
-            if (!string.IsNullOrWhiteSpace(portsJson) && portsJson.StartsWith("["))
-            {
-                 availablePorts = JsonSerializer.Deserialize<List<int>>(portsJson) ?? new List<int>();
-            }
-        }
-        catch
-        {
-            // Ignore parsing error if tags is not JSON array of ints
-        }
-        
-        if (availablePorts.Count < portCount)
-        {
-            // Auto-generate ports starting from 30000
-            var startPort = 30000;
-            while (availablePorts.Count < portCount + 10) // buffer
-            {
-                if (!availablePorts.Contains(startPort))
-                {
-                    availablePorts.Add(startPort);
-                }
-                startPort++;
-            }
-        }
-        
-        // Take needed ports
-        var assignedPorts = availablePorts.Take(portCount).ToList();
-        var remainingPorts = availablePorts.Skip(portCount).ToList();
-        
-        // Update agent's available ports
-        const string updatePortsSql = @"
-            UPDATE agent 
-            SET tags = @AvailablePorts 
-            WHERE id = @AgentId";
-        
-        await connection.ExecuteAsync(updatePortsSql, new
-        {
-            AgentId = agentId,
-            AvailablePorts = JsonSerializer.Serialize(remainingPorts)
-        });
-        
-        // Return port assignments
-        return assignedPorts.Select((port, index) => new PortAssignment
-        {
-            InternalPort = port,
-            ExternalPort = port,
-            Protocol = "TCP",
-            Name = $"port-{index}"
-        }).ToList();
-    }
-    
-    public async Task<bool> ReleasePorts(string agentId, List<int> ports)
-    {
-        using var connection = _connectionFactory.CreateConnection();
-        
-        // Get current available ports
-        const string getPortsSql = @"
-            SELECT tags FROM agent WHERE id = @AgentId";
-        
-        var currentPortsJson = await connection.ExecuteScalarAsync<string>(getPortsSql, new { AgentId = agentId });
-        var currentPorts = new List<int>();
-        try
-        {
-             if (!string.IsNullOrWhiteSpace(currentPortsJson) && currentPortsJson.StartsWith("["))
-             {
-                 currentPorts = JsonSerializer.Deserialize<List<int>>(currentPortsJson) ?? new List<int>();
-             }
-        }
-        catch {}
-        
-        // Add released ports back
-        currentPorts.AddRange(ports);
-        currentPorts = currentPorts.Distinct().OrderBy(p => p).ToList();
-        
-        // Update agent
-        const string updatePortsSql = @"
-            UPDATE agent 
-            SET tags = @AvailablePorts 
-            WHERE id = @AgentId";
-        
-        var result = await connection.ExecuteAsync(updatePortsSql, new
-        {
-            AgentId = agentId,
-            AvailablePorts = JsonSerializer.Serialize(currentPorts)
-        });
-        
-        if (result > 0)
-        {
-            _logger.LogDebug("Released {Count} ports back to agent {AgentId}", ports.Count, agentId);
-            return true;
-        }
-        
-        return false;
-    }
-}
-
 // DTOs used by CommandService
 public class SpawnResult
 {
     public int ProcessId { get; set; }
     public string InstanceId { get; set; } = string.Empty;
-    public List<PortAssignment> Ports { get; set; } = new();
+    public int AssignedPort { get; set; }
     public DateTime StartTime { get; set; }
+}
+
+public class SpawnCommandParams
+{
+    public string ExecutablePath { get; set; } = string.Empty;
+    public string Arguments { get; set; } = string.Empty;
+    public string WorkingDirectory { get; set; } = string.Empty;
+    public Dictionary<string, string> EnvironmentVariables { get; set; } = new();
+    public int Port { get; set; }
+    public int HealthCheckInterval { get; set; } = 30;
+    public int InstanceIndex { get; set; }
 }
 
 public class PortAssignment

@@ -46,7 +46,6 @@ builder.Services.AddScoped<IApplicationManager, ApplicationManager>();
 builder.Services.AddScoped<IAgentManager, AgentManager>();
 builder.Services.AddScoped<IScalingEngine, ScalingEngine>();
 builder.Services.AddScoped<ICommandService, CommandService>();
-builder.Services.AddScoped<INetworkManager, NetworkManager>();
 builder.Services.AddSingleton<IAgentGrpcService, AgentGrpcService>();
 
 // gRPC Services

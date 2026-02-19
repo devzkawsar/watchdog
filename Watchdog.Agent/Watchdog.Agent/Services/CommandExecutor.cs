@@ -6,7 +6,7 @@ using Microsoft.Extensions.Options;
 using Watchdog.Agent.Configuration;
 using Watchdog.Agent.Interface;
 using Watchdog.Agent.Models;
-using Watchdog.Agent.Protos;
+using Watchdog.Api.Protos;
 using ApplicationStatus = Watchdog.Agent.Enums.ApplicationStatus;
 
 namespace Watchdog.Agent.Services;
@@ -127,11 +127,7 @@ public class CommandExecutor : ICommandExecutorInternal
         {
             ApplicationId = command.ApplicationId,
             InstanceId = command.InstanceId,
-            ExecutablePath = parameters.ExecutablePath ?? string.Empty,
             Arguments = parameters.Arguments ?? string.Empty,
-            WorkingDirectory = parameters.WorkingDirectory ?? string.Empty,
-            HealthCheckUrl = parameters.HealthCheckUrl ?? string.Empty,
-            HealthCheckInterval = parameters.HealthCheckInterval,
             InstanceIndex = parameters.InstanceIndex
         };
 
@@ -142,6 +138,8 @@ public class CommandExecutor : ICommandExecutorInternal
                 spawnCommand.EnvironmentVariables[kvp.Key] = kvp.Value;
             }
         }
+
+        int assignedPort = parameters.Port;
 
         if (OperatingSystem.IsWindows() && parameters.RunAsWindowsService)
         {
@@ -159,27 +157,9 @@ public class CommandExecutor : ICommandExecutorInternal
             }
         }
 
-        var ports = new List<PortMapping>();
-        if (parameters.Ports != null)
-        {
-            foreach (var p in parameters.Ports)
-            {
-                var portMapping = new PortMapping
-                {
-                    Name = p.Name,
-                    InternalPort = p.InternalPort,
-                    ExternalPort = p.ExternalPort,
-                    Protocol = p.Protocol
-                };
-
-                ports.Add(portMapping);
-                spawnCommand.Ports.Add(portMapping);
-            }
-        }
-
         await _applicationManager.CreateApplicationInstance(spawnCommand);
 
-        var result = await _processManager.SpawnProcess(spawnCommand, ports);
+        var result = await _processManager.SpawnProcess(spawnCommand, assignedPort);
         if (!result.Success)
         {
             await _applicationManager.UpdateInstanceStatus(command.InstanceId, ApplicationStatus.Error);
@@ -199,14 +179,14 @@ public class CommandExecutor : ICommandExecutorInternal
             command.InstanceId,
             ApplicationStatus.Running,
             result.ProcessId,
-            result.Ports);
+            result.AssignedPort);
 
         await _grpcClient.SendApplicationSpawned(new ApplicationSpawned
         {
             InstanceId = command.InstanceId,
             ApplicationId = command.ApplicationId,
             ProcessId = result.ProcessId ?? 0,
-            Ports = { result.Ports },
+            AssignedPort = result.AssignedPort,
             StartTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
         }, cancellationToken);
     }
@@ -272,7 +252,7 @@ public class CommandExecutor : ICommandExecutorInternal
                 InstanceId = command.InstanceId,
                 ApplicationId = instance.ApplicationId,
                 ProcessId = instance.ProcessId.Value,
-                Ports = { instance.Ports },
+                AssignedPort = instance.AssignedPort ?? 0,
                 StartTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
             }, cancellationToken);
         }
@@ -301,7 +281,7 @@ public class CommandExecutor : ICommandExecutorInternal
         public string? Arguments { get; set; }
         public string? WorkingDirectory { get; set; }
         public Dictionary<string, string>? EnvironmentVariables { get; set; }
-        public List<PortMapping>? Ports { get; set; }
+        public int Port { get; set; }
         public string? HealthCheckUrl { get; set; }
         public int HealthCheckInterval { get; set; } = 30;
         public int InstanceIndex { get; set; }

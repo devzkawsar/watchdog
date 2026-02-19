@@ -78,17 +78,16 @@ public class ApplicationMonitoringGrpcServiceImpl : ApplicationMonitoringService
                 const string insertApplicationSql = @"
                     INSERT INTO application
                         (id, name, display_name, executable_path, arguments, working_directory,
-                         application_type, health_check_url, health_check_interval, heartbeat_timeout,
+                         application_type, heartbeat_timeout,
                          desired_instances, min_instances, max_instances,
                          environment_variables, auto_start, created, created_by)
                     VALUES
                         (@Id, @Name, @DisplayName, @ExecutablePath, @Arguments, '',
-                         @ApplicationType, @HealthCheckInterval, @HeartbeatTimeout,
-                         0, 0, 0,
+                         @ApplicationType, @HeartbeatTimeout,
+                         1,1,2,
                          '{}', 0, GETUTCDATE(), NULL)";
 
                 var heartbeatTimeout = Math.Max(30, request.ExpectedHeartbeatIntervalSeconds * 2);
-                var healthCheckInterval = Math.Max(5, request.ExpectedHeartbeatIntervalSeconds);
 
                 await connection.ExecuteAsync(insertApplicationSql, new
                 {
@@ -98,7 +97,6 @@ public class ApplicationMonitoringGrpcServiceImpl : ApplicationMonitoringService
                     ExecutablePath = request.ExecutablePath ?? string.Empty,
                     Arguments = request.Arguments ?? string.Empty,
                     ApplicationType = request.ApplicationType,
-                    HealthCheckInterval = healthCheckInterval,
                     HeartbeatTimeout = heartbeatTimeout
                 });
             }

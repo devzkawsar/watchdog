@@ -5,7 +5,7 @@ using Microsoft.Extensions.Options;
 using Watchdog.Agent.Configuration;
 using Watchdog.Agent.Interface;
 using Watchdog.Agent.Models;
-using Watchdog.Agent.Protos;
+using Watchdog.Api.Protos;
 using ApplicationStatus = Watchdog.Agent.Enums.ApplicationStatus;
 
 namespace Watchdog.Agent.Services
@@ -88,19 +88,6 @@ namespace Watchdog.Agent.Services
                 {
                     _logger.LogError("Working directory not found: {Path}", config.WorkingDirectory);
                     return Task.FromResult(false);
-                }
-                
-                // Validate port requirements
-                if (config.PortRequirements != null && config.PortRequirements.Any())
-                {
-                    foreach (var portReq in config.PortRequirements)
-                    {
-                        if (portReq.InternalPort < 1 || portReq.InternalPort > 65535)
-                        {
-                            _logger.LogError("Invalid port number: {Port}", portReq.InternalPort);
-                            return Task.FromResult(false);
-                        }
-                    }
                 }
                 
                 // Validate environment variables
@@ -207,7 +194,7 @@ namespace Watchdog.Agent.Services
             string instanceId, 
             ApplicationStatus status,
             int? processId = null,
-            List<PortMapping>? ports = null,
+            int? assignedPort = null,
             DateTime? reattachedAt = null)
         {
             if (_instances.TryGetValue(instanceId, out var instance))
@@ -219,8 +206,8 @@ namespace Watchdog.Agent.Services
                     if (processId.HasValue)
                         instance.ProcessId = processId.Value;
                     
-                    if (ports != null)
-                        instance.Ports = ports;
+                    if (assignedPort.HasValue)
+                        instance.AssignedPort = assignedPort.Value;
                     
                     if (status == ApplicationStatus.Running)
                     {
@@ -263,15 +250,15 @@ namespace Watchdog.Agent.Services
             }
         }
         
-        public async Task<List<Watchdog.Agent.Protos.ApplicationStatus>> GetInstanceStatuses()
+        public async Task<List<Watchdog.Api.Protos.ApplicationStatus>> GetInstanceStatuses()
         {
-            var statuses = new List<Watchdog.Agent.Protos.ApplicationStatus>();
+            var statuses = new List<Watchdog.Api.Protos.ApplicationStatus>();
             
             foreach (var instance in _instances.Values)
             {
                 try
                 {
-                    var status = new Watchdog.Agent.Protos.ApplicationStatus
+                    var status = new Watchdog.Api.Protos.ApplicationStatus
                     {
                         InstanceId = instance.InstanceId,
                         ApplicationId = instance.ApplicationId,
@@ -283,10 +270,10 @@ namespace Watchdog.Agent.Services
                         HealthStatus = await GetInstanceHealthStatus(instance)
                     };
                     
-                    // Add ports if available
-                    if (instance.Ports != null && instance.Ports.Any())
+                    // Add port if available
+                    if (instance.AssignedPort.HasValue)
                     {
-                        status.Ports.AddRange(instance.Ports);
+                        status.AssignedPort = instance.AssignedPort.Value;
                     }
                     
                     // Add metrics if available
@@ -321,16 +308,9 @@ namespace Watchdog.Agent.Services
                         Arguments = assignment.Arguments,
                         WorkingDirectory = assignment.WorkingDirectory,
                         DesiredInstances = assignment.DesiredInstances,
-                        PortRequirements = assignment.Ports.Select(p => new PortRequirement
-                        {
-                            Name = p.Name,
-                            InternalPort = p.InternalPort,
-                            Protocol = p.Protocol,
-                            Required = p.Required
-                        }).ToList(),
+                        BuiltInPort = assignment.HasBuiltInPort ? assignment.BuiltInPort : null,
                         EnvironmentVariables = assignment.EnvironmentVariables.ToDictionary(
                             kvp => kvp.Key, kvp => kvp.Value),
-                        HealthCheckUrl = assignment.HealthCheckUrl,
                         HealthCheckInterval = assignment.HealthCheckInterval
                     };
                     
@@ -404,7 +384,6 @@ namespace Watchdog.Agent.Services
                                 Arguments = app.Arguments ?? string.Empty,
                                 WorkingDirectory = app.WorkingDirectory ?? string.Empty,
                                 InstanceIndex = index,
-                                HealthCheckUrl = app.HealthCheckUrl,
                                 HealthCheckInterval = app.HealthCheckInterval
                             }
                         };
@@ -719,7 +698,7 @@ namespace Watchdog.Agent.Services
                 _logger.LogError(ex, "Failed to save state");
             }
         }
-        public async Task SyncInstancesFromApi(List<Watchdog.Agent.Protos.ApplicationStatus> activeInstances)
+        public async Task SyncInstancesFromApi(List<Watchdog.Api.Protos.ApplicationStatus> activeInstances)
         {
             _logger.LogInformation("Syncing {Count} instances from Control Plane...", activeInstances.Count);
             
@@ -793,25 +772,13 @@ namespace Watchdog.Agent.Services
                             ExecutablePath = appConfig.ExecutablePath,
                             Arguments = appConfig.Arguments,
                             WorkingDirectory = appConfig.WorkingDirectory,
-                            HealthCheckUrl = appConfig.HealthCheckUrl,
-                            HealthCheckInterval = appConfig.HealthCheckInterval
+                            HealthCheckInterval = appConfig.HealthCheckInterval,
+                            Port = apiInstance.AssignedPort
                         }
                     };
                     
-                    // Recover ports if available
-                    if (apiInstance.Ports != null)
-                    {
-                        foreach (var p in apiInstance.Ports)
-                        {
-                            managedApp.Ports.Add(new Watchdog.Agent.Protos.PortMapping 
-                            { 
-                                Name = p.Name,
-                                InternalPort = p.InternalPort,
-                                ExternalPort = p.ExternalPort,
-                                Protocol = p.Protocol
-                            });
-                        }
-                    }
+                    if (apiInstance.AssignedPort > 0)
+                        managedApp.AssignedPort = apiInstance.AssignedPort;
                     
                     _instances[managedApp.InstanceId] = managedApp;
                 }

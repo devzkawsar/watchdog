@@ -1,4 +1,4 @@
-using Watchdog.Agent.Protos;
+using Watchdog.Api.Protos;
 
 namespace Watchdog.Agent.Models;
 
@@ -10,7 +10,7 @@ public class ApplicationConfig
     public string Arguments { get; set; } = string.Empty;
     public string WorkingDirectory { get; set; } = string.Empty;
     public int DesiredInstances { get; set; } = 1;
-    public List<PortRequirement> PortRequirements { get; set; } = new();
+    public int? BuiltInPort { get; set; }
     public Dictionary<string, string> EnvironmentVariables { get; set; } = new();
     public string HealthCheckUrl { get; set; } = string.Empty;
     public int HealthCheckInterval { get; set; } = 30;

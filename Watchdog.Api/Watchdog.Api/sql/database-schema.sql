@@ -60,6 +60,7 @@ CREATE TABLE application (
     max_instances INT DEFAULT 2,
     
     environment_variables VARCHAR(MAX) DEFAULT '{}',
+    built_in_port INT NULL,
 
     auto_start BIT DEFAULT 1,
     max_restart_attempts INT DEFAULT 3,

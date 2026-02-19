@@ -70,6 +70,7 @@ public class AgentGrpcServiceImpl : AgentService.AgentServiceBase
                 Arguments = app.Arguments,
                 WorkingDirectory = app.WorkingDirectory,
                 DesiredInstances = app.DesiredInstances,
+                BuiltInPort = app.BuiltInPort ?? 0,
                 EnvironmentVariables = { app.EnvironmentVariables },
             }).ToList();
             
@@ -115,13 +116,7 @@ public class AgentGrpcServiceImpl : AgentService.AgentServiceBase
                 var originalInstance = activeInstances.First(i => i.InstanceId == instanceStatus.InstanceId);
                 if (originalInstance.AssignedPort.HasValue && originalInstance.AssignedPort.Value > 0)
                 {
-                     instanceStatus.Ports.Add(new Watchdog.Api.Protos.PortMapping
-                     {
-                         Name = "http", // Default assumption since we only store port
-                         InternalPort = originalInstance.AssignedPort.Value,
-                         ExternalPort = originalInstance.AssignedPort.Value,
-                         Protocol = "TCP"
-                     });
+                     instanceStatus.AssignedPort = originalInstance.AssignedPort.Value;
                 }
             }
             
@@ -196,10 +191,10 @@ public class AgentGrpcServiceImpl : AgentService.AgentServiceBase
                     processId > 0 ? processId : null,
                     request.AgentId);
                 
-                // If ports are reported, update them as well
-                if (appStatus.Ports.Count > 0)
+                // If port is reported, update it as well
+                if (appStatus.AssignedPort > 0)
                 {
-                    await RecordApplicationPortsAsync(appStatus.InstanceId, appStatus.Ports.ToList());
+                    await RecordApplicationPortsAsync(appStatus.InstanceId, appStatus.AssignedPort);
                 }
             }
             
@@ -374,12 +369,8 @@ public class AgentGrpcServiceImpl : AgentService.AgentServiceBase
                      @AssignedPort, @StartedAt, GETUTCDATE(), GETUTCDATE())
             END";
         
-        // Extract primary port
-        int assignedPort = 0;
-        if (spawned.Ports.Count > 0)
-        {
-            assignedPort = spawned.Ports[0].ExternalPort;
-        }
+        // Extract assigned port
+        int assignedPort = spawned.AssignedPort;
 
         await connection.ExecuteAsync(sql, new
         {
@@ -392,7 +383,7 @@ public class AgentGrpcServiceImpl : AgentService.AgentServiceBase
         });
     }
     
-    private async Task RecordApplicationPortsAsync(string instanceId, List<PortMapping> ports)
+    private async Task RecordApplicationPortsAsync(string instanceId, int assignedPort)
     {
         using var connection = _connectionFactory.CreateConnection();
         
@@ -402,12 +393,7 @@ public class AgentGrpcServiceImpl : AgentService.AgentServiceBase
                 updated_at = GETUTCDATE()
             WHERE instance_id = @InstanceId";
             
-        int assignedPort = 0;
-        if (ports.Count > 0)
-        {
-            assignedPort = ports[0].ExternalPort;
-        }
-        
+        // Use the passed port
         await connection.ExecuteAsync(sql, new
         {
             InstanceId = instanceId,
@@ -469,14 +455,7 @@ public class AgentGrpcServiceImpl : AgentService.AgentServiceBase
                         ExecutablePath = spawnParams.ExecutablePath,
                         Arguments = spawnParams.Arguments,
                         WorkingDirectory = spawnParams.WorkingDirectory,
-                        EnvironmentVariables = { spawnParams.EnvironmentVariables },
-                        Ports = { spawnParams.Ports.Select(p => new PortMapping
-                        {
-                            Name = p.Name,
-                            InternalPort = p.InternalPort,
-                            ExternalPort = p.ExternalPort,
-                            Protocol = p.Protocol
-                        })},
+                        Port = spawnParams.Port,
                         HealthCheckInterval = spawnParams.HealthCheckInterval
                     };
                 }
@@ -525,7 +504,7 @@ public class SpawnCommandParams
     public string Arguments { get; set; } = string.Empty;
     public string WorkingDirectory { get; set; } = string.Empty;
     public Dictionary<string, string> EnvironmentVariables { get; set; } = new();
-    public List<PortMapping> Ports { get; set; } = new();
+    public int Port { get; set; }
     public int HealthCheckInterval { get; set; } = 30;
     public int InstanceIndex { get; set; }
 }
