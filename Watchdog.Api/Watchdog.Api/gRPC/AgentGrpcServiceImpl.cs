@@ -269,7 +269,6 @@ public class AgentGrpcServiceImpl : AgentService.AgentServiceBase
                     else if (message.MessageCase == AgentMessage.MessageOneofCase.Error)
                     {
                         agentId = message.Error.AgentId;
-                        // Don't register connection yet if we only got an error, wait for heartbeat
                     }
                 }
                 

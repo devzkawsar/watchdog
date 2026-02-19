@@ -1,16 +1,20 @@
 {
   "Applications": [
     {
-      "Id": "polygon-001",
+      "Id": "testapplication-001",
       "Name": "TestConsole",
       "ExecutablePath": "/var/www/html/PEP-Development/Watchdog/TestConsole/TestConsole/bin/Debug/net9.0/TestConsole",
-      "Arguments": "",
-      "WorkingDirectory": "",
-      "DesiredInstances": 3,
-      "BuiltInPort": null,
-      "EnvironmentVariables": {},
+      "Arguments": "string",
+      "WorkingDirectory": "string",
+      "DesiredInstances": 2,
+      "BuiltInPort": 0,
+      "EnvironmentVariables": {
+        "additionalProp1": "string",
+        "additionalProp2": "string",
+        "additionalProp3": "string"
+      },
       "HealthCheckUrl": "",
-      "HealthCheckInterval": 30,
+      "HealthCheckInterval": 0,
       "MaxRestartAttempts": 3,
       "RestartDelaySeconds": 10
     }
@@ -27,7 +31,7 @@
         "WorkingDirectory": "",
         "EnvironmentVariables": {},
         "Port": 0,
-        "HasPort": false,
+        "HasPort": true,
         "HealthCheckInterval": 30,
         "InstanceIndex": 1
       },
@@ -187,7 +191,7 @@
         "WorkingDirectory": "",
         "EnvironmentVariables": {},
         "Port": 0,
-        "HasPort": false,
+        "HasPort": true,
         "HealthCheckInterval": 30,
         "InstanceIndex": 2
       },
@@ -379,7 +383,7 @@
         "WorkingDirectory": "",
         "EnvironmentVariables": {},
         "Port": 0,
-        "HasPort": false,
+        "HasPort": true,
         "HealthCheckInterval": 30,
         "InstanceIndex": 1
       },
@@ -507,7 +511,7 @@
         "WorkingDirectory": "",
         "EnvironmentVariables": {},
         "Port": 0,
-        "HasPort": false,
+        "HasPort": true,
         "HealthCheckInterval": 30,
         "InstanceIndex": 1
       },
@@ -539,7 +543,7 @@
         "WorkingDirectory": "",
         "EnvironmentVariables": {},
         "Port": 0,
-        "HasPort": false,
+        "HasPort": true,
         "HealthCheckInterval": 30,
         "InstanceIndex": 1
       },
@@ -571,7 +575,7 @@
         "WorkingDirectory": "",
         "EnvironmentVariables": {},
         "Port": 0,
-        "HasPort": false,
+        "HasPort": true,
         "HealthCheckInterval": 30,
         "InstanceIndex": 1
       },
@@ -667,7 +671,7 @@
         "WorkingDirectory": "",
         "EnvironmentVariables": {},
         "Port": 0,
-        "HasPort": false,
+        "HasPort": true,
         "HealthCheckInterval": 30,
         "InstanceIndex": 1
       },
@@ -763,7 +767,7 @@
         "WorkingDirectory": "",
         "EnvironmentVariables": {},
         "Port": 0,
-        "HasPort": false,
+        "HasPort": true,
         "HealthCheckInterval": 30,
         "InstanceIndex": 2
       },
@@ -795,7 +799,7 @@
         "WorkingDirectory": "",
         "EnvironmentVariables": {},
         "Port": 0,
-        "HasPort": false,
+        "HasPort": true,
         "HealthCheckInterval": 30,
         "InstanceIndex": 1
       },
@@ -1009,6 +1013,38 @@
       "ReattachedAt": null
     },
     {
+      "InstanceId": "testapplication-001-local-agent-01-ad8907b520c34aeab37ae9838c312f6d",
+      "ApplicationId": "testapplication-001",
+      "Command": {
+        "ApplicationId": "testapplication-001",
+        "InstanceId": "testapplication-001-local-agent-01-ad8907b520c34aeab37ae9838c312f6d",
+        "ExecutablePath": "/var/www/html/PEP-Development/Watchdog/TestConsole/TestConsole/bin/Debug/net9.0/TestConsole",
+        "Arguments": "string",
+        "WorkingDirectory": "string",
+        "EnvironmentVariables": {},
+        "Port": 0,
+        "HasPort": true,
+        "HealthCheckInterval": 30,
+        "InstanceIndex": 1
+      },
+      "IsWindowsService": false,
+      "WindowsServiceName": null,
+      "PersistWindowsService": false,
+      "Status": 2,
+      "ProcessId": 73425,
+      "AssignedPort": 30000,
+      "Metrics": null,
+      "CreatedAt": "2026-02-19T04:13:40.555685Z",
+      "StartedAt": "2026-02-19T04:14:10.622179Z",
+      "StoppedAt": null,
+      "StopReported": false,
+      "LastHealthCheck": "2026-02-19T04:14:10.6221795Z",
+      "RestartCount": 0,
+      "LastRestartAttempt": null,
+      "LastError": null,
+      "ReattachedAt": null
+    },
+    {
       "InstanceId": "testapplication-001-local-agent-01-f15cdaaff352471da5689f75501a605a",
       "ApplicationId": "testapplication-001",
       "Command": {
@@ -1035,6 +1071,70 @@
       "StoppedAt": null,
       "StopReported": false,
       "LastHealthCheck": "2026-02-19T02:42:51.8739526Z",
+      "RestartCount": 0,
+      "LastRestartAttempt": null,
+      "LastError": null,
+      "ReattachedAt": null
+    },
+    {
+      "InstanceId": "testapplication-001-local-agent-01-a7e010a752fe4efa8546af096c200b15",
+      "ApplicationId": "testapplication-001",
+      "Command": {
+        "ApplicationId": "testapplication-001",
+        "InstanceId": "testapplication-001-local-agent-01-a7e010a752fe4efa8546af096c200b15",
+        "ExecutablePath": "/var/www/html/PEP-Development/Watchdog/TestConsole/TestConsole/bin/Debug/net9.0/TestConsole",
+        "Arguments": "string",
+        "WorkingDirectory": "string",
+        "EnvironmentVariables": {},
+        "Port": 0,
+        "HasPort": true,
+        "HealthCheckInterval": 30,
+        "InstanceIndex": 1
+      },
+      "IsWindowsService": false,
+      "WindowsServiceName": null,
+      "PersistWindowsService": false,
+      "Status": 2,
+      "ProcessId": 123517,
+      "AssignedPort": 30000,
+      "Metrics": null,
+      "CreatedAt": "2026-02-19T05:44:21.4324023Z",
+      "StartedAt": "2026-02-19T05:44:51.4943397Z",
+      "StoppedAt": null,
+      "StopReported": false,
+      "LastHealthCheck": "2026-02-19T05:44:51.4943407Z",
+      "RestartCount": 0,
+      "LastRestartAttempt": null,
+      "LastError": null,
+      "ReattachedAt": null
+    },
+    {
+      "InstanceId": "testapplication-001-local-agent-01-ad350d8dc39e4d9b99440361e110b376",
+      "ApplicationId": "testapplication-001",
+      "Command": {
+        "ApplicationId": "testapplication-001",
+        "InstanceId": "testapplication-001-local-agent-01-ad350d8dc39e4d9b99440361e110b376",
+        "ExecutablePath": "/var/www/html/PEP-Development/Watchdog/TestConsole/TestConsole/bin/Debug/net9.0/TestConsole",
+        "Arguments": "string",
+        "WorkingDirectory": "string",
+        "EnvironmentVariables": {},
+        "Port": 0,
+        "HasPort": true,
+        "HealthCheckInterval": 30,
+        "InstanceIndex": 1
+      },
+      "IsWindowsService": false,
+      "WindowsServiceName": null,
+      "PersistWindowsService": false,
+      "Status": 2,
+      "ProcessId": 75825,
+      "AssignedPort": 30001,
+      "Metrics": null,
+      "CreatedAt": "2026-02-19T04:17:40.6901518Z",
+      "StartedAt": "2026-02-19T04:18:10.7413013Z",
+      "StoppedAt": null,
+      "StopReported": false,
+      "LastHealthCheck": "2026-02-19T04:18:10.7413024Z",
       "RestartCount": 0,
       "LastRestartAttempt": null,
       "LastError": null,
@@ -1083,7 +1183,7 @@
         "WorkingDirectory": "",
         "EnvironmentVariables": {},
         "Port": 0,
-        "HasPort": false,
+        "HasPort": true,
         "HealthCheckInterval": 30,
         "InstanceIndex": 1
       },
@@ -1201,5 +1301,5 @@
       "ReattachedAt": null
     }
   ],
-  "SavedAt": "2026-02-19T02:48:13.4818744Z"
+  "SavedAt": "2026-02-19T05:44:51.4943621Z"
 }

@@ -94,35 +94,35 @@ public class ProcessManager : IProcessManagerInternal
             }
 
             // 2. Check if there's an orphaned process on the system that we should adopt
-            var instance = await _applicationManager.GetApplicationInstance(command.InstanceId);
-            if (instance != null && instance.ProcessId.HasValue)
-            {
-                try
-                {
-                    var orphanedProcess = Process.GetProcessById(instance.ProcessId.Value);
-                    if (!orphanedProcess.HasExited && 
-                        string.Equals(Path.GetFullPath(orphanedProcess.MainModule?.FileName ?? ""), 
-                                      Path.GetFullPath(command.ExecutablePath), 
-                                      StringComparison.OrdinalIgnoreCase))
-                    {
-                        _logger.LogInformation(
-                            "Found orphaned process {Pid} for instance {InstanceId}. Adopting and skipping spawn.", 
-                            orphanedProcess.Id, command.InstanceId);
-
-                        // Update command with latest if it was rebuilt from sync
-                        instance.Command = command;
-                        instance.AssignedPort = assignedPort;
-
-                        await RegisterManagedProcessAsync(instance, orphanedProcess);
-                        return ProcessSpawnResult.Succeeded(orphanedProcess.Id, assignedPort);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogDebug(ex, "Orphan check failed for instance {InstanceId} PID {Pid}", 
-                        command.InstanceId, instance.ProcessId);
-                }
-            }
+            // var instance = await _applicationManager.GetApplicationInstance(command.InstanceId);
+            // if (instance != null && instance.ProcessId.HasValue)
+            // {
+            //     try
+            //     {
+            //         var orphanedProcess = Process.GetProcessById(instance.ProcessId.Value);
+            //         if (!orphanedProcess.HasExited && 
+            //             string.Equals(Path.GetFullPath(orphanedProcess.MainModule?.FileName ?? ""), 
+            //                           Path.GetFullPath(command.ExecutablePath), 
+            //                           StringComparison.OrdinalIgnoreCase))
+            //         {
+            //             _logger.LogInformation(
+            //                 "Found orphaned process {Pid} for instance {InstanceId}. Adopting and skipping spawn.", 
+            //                 orphanedProcess.Id, command.InstanceId);
+            //
+            //             // Update command with latest if it was rebuilt from sync
+            //             instance.Command = command;
+            //             instance.AssignedPort = assignedPort;
+            //
+            //             await RegisterManagedProcessAsync(instance, orphanedProcess);
+            //             return ProcessSpawnResult.Succeeded(orphanedProcess.Id, assignedPort);
+            //         }
+            //     }
+            //     catch (Exception ex)
+            //     {
+            //         _logger.LogDebug(ex, "Orphan check failed for instance {InstanceId} PID {Pid}", 
+            //             command.InstanceId, instance.ProcessId);
+            //     }
+            // }
 
             _logger.LogInformation(
                 "Spawning process for application {AppId} instance {InstanceId}",
