@@ -32,14 +32,36 @@ public class HeartbeatMonitorBackgroundService : BackgroundService
                 {
                     foreach (var stale in staleInstances)
                     {
-                        var updated = await repo.UpdateInstanceStatusWithoutHeartbeat(stale.InstanceId, "error");
+                        var now = DateTime.UtcNow;
+                        var timeoutSeconds = stale.HeartbeatTimeout;
+
+                        if (timeoutSeconds <= 0)
+                        {
+                            continue;
+                        }
+
+                        var overdueSeconds = stale.LastHeartbeat.HasValue
+                            ? (now - stale.LastHeartbeat.Value).TotalSeconds
+                            : double.MaxValue;
+
+                        var targetStatus = overdueSeconds >= (timeoutSeconds * 3)
+                            ? "error"
+                            : "warning";
+
+                        if (string.Equals(stale.Status, targetStatus, StringComparison.OrdinalIgnoreCase))
+                        {
+                            continue;
+                        }
+
+                        var updated = await repo.UpdateInstanceStatusWithoutHeartbeat(stale.InstanceId, targetStatus);
                         if (updated > 0)
                         {
                             _logger.LogWarning(
-                                "Marked instance {InstanceId} (App: {ApplicationId}, Agent: {AgentId}) as Error due to stale heartbeat (LastHeartbeat: {LastHeartbeat}, TimeoutSeconds: {HeartbeatTimeout})",
+                                "Marked instance {InstanceId} (App: {ApplicationId}, Agent: {AgentId}) as {Status} due to stale heartbeat (LastHeartbeat: {LastHeartbeat}, TimeoutSeconds: {HeartbeatTimeout})",
                                 stale.InstanceId,
                                 stale.ApplicationId,
                                 stale.AgentId,
+                                targetStatus,
                                 stale.LastHeartbeat,
                                 stale.HeartbeatTimeout);
                         }

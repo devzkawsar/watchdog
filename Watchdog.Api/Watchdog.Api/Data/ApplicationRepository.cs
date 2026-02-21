@@ -240,51 +240,16 @@ public class ApplicationRepository : IApplicationRepository
                 stopped_at AS StoppedAt, 
                 created_at AS CreatedAt, 
                 updated_at AS UpdatedAt
-            FROM application_instance
-            WHERE status IN ('running', 'starting')";
-        
-        return await connection.QueryAsync<ApplicationInstance>(sql);
-    }
-
-    public async Task<IEnumerable<ApplicationInstanceHeartbeatInfo>> GetStaleInstancesByHeartbeat()
-    {
-        using var connection = _connectionFactory.CreateConnection();
-        
-        const string sql = @"
-            SELECT
-                ai.instance_id AS InstanceId,
-                ai.application_id AS ApplicationId,
-                ai.agent_id AS AgentId,
-                ai.status AS Status,
-                ai.last_heartbeat AS LastHeartbeat,
-                a.health_check_interval AS HealthCheckInterval,
-                a.heartbeat_timeout AS HeartbeatTimeout
             FROM application_instance ai
             INNER JOIN application a ON a.id = ai.application_id
-            WHERE ai.status IN ('running', 'starting')
+            WHERE ai.status IN ('running', 'starting', 'warning')
               AND (
                     ai.last_heartbeat IS NULL
                     OR ai.last_heartbeat < DATEADD(SECOND, -a.heartbeat_timeout, GETUTCDATE())
-                  )";
-        
-        return await connection.QueryAsync<ApplicationInstanceHeartbeatInfo>(sql);
-    }
+                  )
+            ORDER BY ai.updated_at DESC";
 
-    public async Task<int> UpdateInstanceStatusWithoutHeartbeat(string instanceId, string status)
-    {
-        using var connection = _connectionFactory.CreateConnection();
-        
-        const string sql = @"
-            UPDATE application_instance
-            SET status = @Status,
-                updated_at = GETUTCDATE()
-            WHERE instance_id = @InstanceId";
-        
-        return await connection.ExecuteAsync(sql, new
-        {
-            InstanceId = instanceId,
-            Status = status
-        });
+        return await connection.QueryAsync<ApplicationInstance>(sql);
     }
     
     public async Task<int> UpdateInstanceStatus(string instanceId, string status, 
@@ -314,6 +279,46 @@ public class ApplicationRepository : IApplicationRepository
         });
     }
 
+    public async Task<IEnumerable<ApplicationInstanceHeartbeatInfo>> GetStaleInstancesByHeartbeat()
+    {
+        using var connection = _connectionFactory.CreateConnection();
+
+        const string sql = @"
+            SELECT
+                ai.instance_id AS InstanceId,
+                ai.application_id AS ApplicationId,
+                ai.agent_id AS AgentId,
+                ai.status AS Status,
+                ai.last_heartbeat AS LastHeartbeat,
+                a.health_check_interval AS HealthCheckInterval,
+                a.heartbeat_timeout AS HeartbeatTimeout
+            FROM application_instance ai
+            INNER JOIN application a ON a.id = ai.application_id
+            WHERE ai.status IN ('running', 'starting', 'warning')
+              AND (
+                    ai.last_heartbeat IS NULL
+                    OR ai.last_heartbeat < DATEADD(SECOND, -(a.heartbeat_timeout * 2), GETUTCDATE())
+                  )";
+
+        return await connection.QueryAsync<ApplicationInstanceHeartbeatInfo>(sql);
+    }
+
+    public async Task<int> UpdateInstanceStatusWithoutHeartbeat(string instanceId, string status)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+
+        const string sql = @"
+            UPDATE application_instance
+            SET status = @Status,
+                updated_at = GETUTCDATE()
+            WHERE instance_id = @InstanceId";
+
+        return await connection.ExecuteAsync(sql, new
+        {
+            InstanceId = instanceId,
+            Status = status
+        });
+    }
 
     public async Task<IEnumerable<ApplicationInstance>> GetOrphanInstances(List<string> applicationIds)
     {

@@ -128,7 +128,7 @@ CREATE TABLE application_instance (
        FOREIGN KEY (agent_id) REFERENCES agent(id),
     
     CONSTRAINT ck_app_instances_status
-       CHECK (status IN ('pending','starting','running','stopping','stopped','error'))
+       CHECK (status IN ('pending','starting','running','stopping','stopped','warning','error'))
 );
 
 
