@@ -220,7 +220,7 @@ public class ScalingEngine : IScalingEngine
         
         var agent = assignedList.OrderByDescending(a => a.AvailableMemoryMB).First();
         
-        await _agentManager.AssignApplicationToAgent(agent.Id, applicationId);
+        // await _agentManager.AssignApplicationToAgent(agent.Id, applicationId);
         
         return agent;
     }
