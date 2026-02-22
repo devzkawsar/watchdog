@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 #
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TestConsole", "TestConsole\TestConsole.csproj", "{7587A6A3-E1ED-4D02-AC15-5995641936EF}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PEPMonitoring", "..\..\PEP-Monitoring\PEPMonitoring.csproj", "{79F4B9F1-1B16-4404-B4B5-7CF8E99D7BB0}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PEPMonitoring", "..\..\PEPMonitoring\PEPMonitoring.csproj", "{38FE2D72-CAEA-40E1-A80D-324714049BCD}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -15,9 +15,9 @@ Global
 		{7587A6A3-E1ED-4D02-AC15-5995641936EF}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{7587A6A3-E1ED-4D02-AC15-5995641936EF}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{7587A6A3-E1ED-4D02-AC15-5995641936EF}.Release|Any CPU.Build.0 = Release|Any CPU
-		{79F4B9F1-1B16-4404-B4B5-7CF8E99D7BB0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{79F4B9F1-1B16-4404-B4B5-7CF8E99D7BB0}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{79F4B9F1-1B16-4404-B4B5-7CF8E99D7BB0}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{79F4B9F1-1B16-4404-B4B5-7CF8E99D7BB0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{38FE2D72-CAEA-40E1-A80D-324714049BCD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{38FE2D72-CAEA-40E1-A80D-324714049BCD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{38FE2D72-CAEA-40E1-A80D-324714049BCD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{38FE2D72-CAEA-40E1-A80D-324714049BCD}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

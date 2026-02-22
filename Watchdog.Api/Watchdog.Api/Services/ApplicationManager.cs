@@ -143,32 +143,32 @@ public class ApplicationManager : IApplicationManager
             applicationId, application.DesiredInstances);
         
         // Distribute instances across available agents
-        var agents = await _agentManager.GetOnlineAgents();
-        if (!agents.Any())
-        {
-            _logger.LogError("No online agents available to start application {ApplicationId}", applicationId);
-            return false;
-        }
-        
-        var instancesPerAgent = CalculateInstanceDistribution(application.DesiredInstances, agents.Count());
-        var instanceIndex = 0;
-        
-        foreach (var agent in agents)
-        {
-            var instances = instancesPerAgent[instanceIndex];
-            for (int i = 0; i < instances; i++)
-            {
-                var instanceId = $"{applicationId}-{agent.Id}-{Guid.NewGuid():N}";
-                
-                // Queue spawn command
-                await _commandService.QueueSpawnCommand(
-                    agent.Id,
-                    application,
-                    instanceId,
-                    i + 1);
-            }
-            instanceIndex++;
-        }
+        // var agents = await _agentManager.GetOnlineAgents();
+        // if (!agents.Any())
+        // {
+        //     _logger.LogError("No online agents available to start application {ApplicationId}", applicationId);
+        //     return false;
+        // }
+        //
+        // var instancesPerAgent = CalculateInstanceDistribution(application.DesiredInstances, agents.Count());
+        // var instanceIndex = 0;
+        //
+        // foreach (var agent in agents)
+        // {
+        //     var instances = instancesPerAgent[instanceIndex];
+        //     for (int i = 0; i < instances; i++)
+        //     {
+        //         var instanceId = $"{applicationId}-{agent.Id}-{Guid.NewGuid():N}";
+        //         
+        //         // Queue spawn command
+        //         await _commandService.QueueSpawnCommand(
+        //             agent.Id,
+        //             application,
+        //             instanceId,
+        //             i + 1);
+        //     }
+        //     instanceIndex++;
+        // }
         
         return true;
     }

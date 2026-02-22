@@ -1,42 +1,14 @@
 ﻿// See https://aka.ms/new-console-template for more information
 
-using PEPMonitoring;
-using PEPMonitoring.Config;
+using TestConsole;
 
-var grpcAddress = Environment.GetEnvironmentVariable("PEP_MONITORING_GRPC_ADDRESS") ?? "http://localhost:5144";
-var serviceId = Environment.GetEnvironmentVariable("WATCHDOG_APP_ID");
-var instanceId = Environment.GetEnvironmentVariable("WATCHDOG_INSTANCE_ID");
-var agentId = Environment.GetEnvironmentVariable("WATCHDOG_AGENT_ID");
-var intervalSecondsRaw = Environment.GetEnvironmentVariable("PEP_MONITORING_HEARTBEAT_SECONDS") ?? "10";
-
-_ = int.TryParse(intervalSecondsRaw, out var intervalSeconds);
-if (intervalSeconds <= 0)
-{
-    intervalSeconds = 10;
-}
-
-Console.WriteLine($"Ins:- {instanceId} - Ag:- {agentId}");
-var config = new MonitoringConfig
-{
-    GrpcAddress = grpcAddress,
-    MUUID = serviceId,
-    InstanceId = instanceId,
-    ApplicationType = 0
-};
-
-if (!string.IsNullOrWhiteSpace(agentId))
-{
-    Console.WriteLine($"AgentId: {agentId}");
-}
-
-using var monitor = new DefaultPEPMonitor(config);
+using var monitor = new TestClass();
 
 var processId = Environment.ProcessId;
 var portStr = Environment.GetEnvironmentVariable("PORT");
 int.TryParse(portStr, out var assignedPort);
 
 var ready = await monitor.ReadyAsync(processId: processId, assignedPort: assignedPort);
-Console.WriteLine($"Ready result: {ready} (InstanceId: {config.InstanceId}, ProcessId: {processId})");
 if (!ready)
 {
     Console.WriteLine("Ready failed. Check console error output and Watchdog.Api logs for details.");
@@ -59,7 +31,7 @@ try
         {
             Console.WriteLine("Heartbeat failed. Check console error output and Watchdog.Api logs for details.");
         }
-        await Task.Delay(TimeSpan.FromSeconds(intervalSeconds), cts.Token);
+        await Task.Delay(TimeSpan.FromSeconds(10), cts.Token);
     }
 }
 catch (OperationCanceledException)

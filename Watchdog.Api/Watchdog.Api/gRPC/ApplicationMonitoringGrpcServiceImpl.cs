@@ -179,7 +179,7 @@ public class ApplicationMonitoringGrpcServiceImpl : ApplicationMonitoringService
         {
             using var connection = _connectionFactory.CreateConnection();
 
-            await EnsureApplicationExistsAsync(connection, request.ApplicationId);
+            // await EnsureApplicationExistsAsync(connection, request.ApplicationId);
 
             var instanceId = string.IsNullOrWhiteSpace(request.InstanceId)
                 ? request.ApplicationId
