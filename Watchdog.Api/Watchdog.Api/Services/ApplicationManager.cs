@@ -97,10 +97,10 @@ public class ApplicationManager : IApplicationManager
         _logger.LogInformation("Updated application {ApplicationId}", id);
         
         // Trigger scaling if instance count changed
-        if (existing.DesiredInstances != request.DesiredInstances)
-        {
-            await TriggerScaling(existing);
-        }
+        // if (existing.DesiredInstances != request.DesiredInstances)
+        // {
+        //     await TriggerScaling(existing);
+        // }
         
         return true;
     }
