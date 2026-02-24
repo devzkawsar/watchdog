@@ -39,7 +39,8 @@ public class CommandService : ICommandService
             WorkingDirectory = application.WorkingDirectory,
             EnvironmentVariables = application.EnvironmentVariables,
             Port = application.BuiltInPort ?? 0,
-            InstanceIndex = instanceIndex
+            InstanceIndex = instanceIndex,
+            ApplicationType = application.ApplicationType
         };
         
         var command = new CommandQueueItem
@@ -372,6 +373,7 @@ public class SpawnCommandParams
     public int Port { get; set; }
     public int HealthCheckInterval { get; set; } = 30;
     public int InstanceIndex { get; set; }
+    public int ApplicationType { get; set; }
 }
 
 public class PortAssignment

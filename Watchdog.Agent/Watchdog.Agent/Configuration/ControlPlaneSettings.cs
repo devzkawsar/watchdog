@@ -3,7 +3,7 @@ namespace Watchdog.Agent.Configuration;
 public class ControlPlaneSettings
 {
     public string BaseUrl { get; set; } = "http://localhost:5000";
-    public string GrpcEndpoint { get; set; } = "http://localhost:5001";
+    public string GrpcEndpoint { get; set; } = "http://localhost:5144";
     public int HttpTimeoutSeconds { get; set; } = 30;
     public int GrpcTimeoutSeconds { get; set; } = 30;
     public int ReconnectIntervalSeconds { get; set; } = 10;

@@ -92,7 +92,8 @@ public class AgentGrpcService : IAgentGrpcService
                         WorkingDirectory = spawnParams.WorkingDirectory,
                         Port = spawnParams.Port,
                         HealthCheckInterval = spawnParams.HealthCheckInterval,
-                        InstanceIndex = spawnParams.InstanceIndex
+                        InstanceIndex = spawnParams.InstanceIndex,
+                        ApplicationType = spawnParams.ApplicationType
                     };
                 }
                 break;

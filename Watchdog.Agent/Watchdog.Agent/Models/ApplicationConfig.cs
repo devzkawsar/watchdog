@@ -16,4 +16,5 @@ public class ApplicationConfig
     public int HealthCheckInterval { get; set; } = 30;
     public int MaxRestartAttempts { get; set; } = 3;
     public int RestartDelaySeconds { get; set; } = 10;
+    public int ApplicationType { get; set; }  // 0=Console, 1=Service, 2=IIS
 }

@@ -1,29 +1,35 @@
-﻿// See https://aka.ms/new-console-template for more information
-
+﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using TestConsole;
 
-using var monitor = new TestClass();
-monitor.Ready();
+var builder = Host.CreateApplicationBuilder(args);
+builder.Services.AddHostedService<TestConsoleWorker>();
+builder.Services.AddWindowsService();
 
-using var cts = new CancellationTokenSource();
-Console.CancelKeyPress += (_, e) =>
-{
-    e.Cancel = true;
-    cts.Cancel();
-};
+var host = builder.Build();
+await host.RunAsync();
 
-try
+public class TestConsoleWorker : BackgroundService
 {
-    while (!cts.Token.IsCancellationRequested)
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        monitor.Heartbeat();
-        await Task.Delay(TimeSpan.FromSeconds(10), cts.Token);
+        using var monitor = new TestClass();
+        monitor.Ready();
+
+        try
+        {
+            while (!stoppingToken.IsCancellationRequested)
+            {
+                monitor.Heartbeat();
+                await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        finally
+        {
+            monitor.Unregister();
+        }
     }
-}
-catch (OperationCanceledException)
-{
-}
-finally
-{
-    monitor.Unregister();
 }

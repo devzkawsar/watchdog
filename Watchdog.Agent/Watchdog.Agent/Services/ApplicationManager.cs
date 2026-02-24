@@ -148,8 +148,18 @@ namespace Watchdog.Agent.Services
 
             if (OperatingSystem.IsWindows())
             {
-                if (command.EnvironmentVariables.TryGetValue("WATCHDOG_RUN_AS_WINDOWS_SERVICE", out var runAsService) &&
+                // Check application_type first (1 = Windows Service)
+                bool isWindowsService = command.ApplicationType == 1;
+
+                // Fallback: env var override
+                if (!isWindowsService &&
+                    command.EnvironmentVariables.TryGetValue("WATCHDOG_RUN_AS_WINDOWS_SERVICE", out var runAsService) &&
                     string.Equals(runAsService, "true", StringComparison.OrdinalIgnoreCase))
+                {
+                    isWindowsService = true;
+                }
+
+                if (isWindowsService)
                 {
                     instance.IsWindowsService = true;
 
@@ -311,7 +321,8 @@ namespace Watchdog.Agent.Services
                         BuiltInPort = assignment.HasBuiltInPort ? assignment.BuiltInPort : null,
                         EnvironmentVariables = assignment.EnvironmentVariables.ToDictionary(
                             kvp => kvp.Key, kvp => kvp.Value),
-                        HealthCheckInterval = assignment.HealthCheckInterval
+                        HealthCheckInterval = assignment.HealthCheckInterval,
+                        ApplicationType = assignment.ApplicationType
                     };
                     
                     _applications[config.Id] = config;
@@ -773,7 +784,8 @@ namespace Watchdog.Agent.Services
                             Arguments = appConfig.Arguments,
                             WorkingDirectory = appConfig.WorkingDirectory,
                             HealthCheckInterval = appConfig.HealthCheckInterval,
-                            Port = apiInstance.AssignedPort
+                            Port = apiInstance.AssignedPort,
+                            ApplicationType = appConfig.ApplicationType
                         }
                     };
                     

@@ -993,6 +993,11 @@ public class ProcessManager : IProcessManagerInternal
         if (!OperatingSystem.IsWindows())
             return false;
 
+        // ApplicationType 1 = Windows Service
+        if (command.ApplicationType == 1)
+            return true;
+
+        // Fallback: env var override
         return command.EnvironmentVariables.TryGetValue("WATCHDOG_RUN_AS_WINDOWS_SERVICE", out var value) &&
                string.Equals(value, "true", StringComparison.OrdinalIgnoreCase);
     }
@@ -1043,10 +1048,10 @@ public class ProcessManager : IProcessManagerInternal
         var arguments = BuildCommandLineArguments(command, assignedPort);
         var binPath = BuildServiceBinPath(command.ExecutablePath, arguments);
 
-        var configured = await EnsureWindowsServiceConfigured(serviceName, binPath);
+        var (configured, configError) = await EnsureWindowsServiceConfigured(serviceName, binPath);
         if (!configured)
         {
-            return ProcessSpawnResult.Failed($"Failed to create/configure Windows service {serviceName}");
+            return ProcessSpawnResult.Failed($"Failed to create/configure Windows service {serviceName}: {configError}");
         }
 
         var envSet = ConfigureWindowsServiceEnvironment(serviceName, envVars);
@@ -1088,15 +1093,19 @@ public class ProcessManager : IProcessManagerInternal
 
     private static string BuildServiceBinPath(string executablePath, string arguments)
     {
-        var quotedExe = $"\"{executablePath}\"";
+        // For sc.exe binPath=, we must quote the executable path if it has spaces.
+        // However, since this binPath will itself be wrapped in quotes in EnsureWindowsServiceConfigured's RunSc call,
+        // we need to escape those internal quotes as \" so they are preserved when passed to sc.exe.
+        var innerExe = executablePath.Contains(' ') ? $"\\\"{executablePath}\\\"" : executablePath;
+        
         if (string.IsNullOrWhiteSpace(arguments))
-            return quotedExe;
+            return innerExe;
 
-        return $"{quotedExe} {arguments}";
+        return $"{innerExe} {arguments}";
     }
 
     [SupportedOSPlatform("windows")]
-    private async Task<bool> EnsureWindowsServiceConfigured(string serviceName, string binPath)
+    private async Task<(bool success, string? error)> EnsureWindowsServiceConfigured(string serviceName, string binPath)
     {
         try
         {
@@ -1106,24 +1115,26 @@ public class ProcessManager : IProcessManagerInternal
                 var create = await RunSc($"create \"{serviceName}\" binPath= \"{binPath}\" start= auto");
                 if (!create.Success)
                 {
-                    _logger.LogError("sc create failed for {ServiceName}: {Error}", serviceName, create.Error);
-                    return false;
+                    var error = string.IsNullOrWhiteSpace(create.Error) ? create.Output : create.Error;
+                    _logger.LogError("sc create failed for {ServiceName}: {Error}", serviceName, error);
+                    return (false, $"sc create failed: {error}");
                 }
             }
 
             var config = await RunSc($"config \"{serviceName}\" binPath= \"{binPath}\" start= auto");
             if (!config.Success)
             {
-                _logger.LogError("sc config failed for {ServiceName}: {Error}", serviceName, config.Error);
-                return false;
+                var error = string.IsNullOrWhiteSpace(config.Error) ? config.Output : config.Error;
+                _logger.LogError("sc config failed for {ServiceName}: {Error}", serviceName, error);
+                return (false, $"sc config failed: {error}");
             }
 
-            return true;
+            return (true, null);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed ensuring service {ServiceName} is configured", serviceName);
-            return false;
+            return (false, ex.Message);
         }
     }
 

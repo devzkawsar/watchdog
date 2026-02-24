@@ -8,7 +8,12 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <ProjectReference Include="../../../PEPMonitoring/PEPMonitoring.csproj" />
+        <ProjectReference Include="../../../PEP-Monitoring/PEPMonitoring.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.3" />
+      <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.3" />
     </ItemGroup>
 
 </Project>
