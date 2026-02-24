@@ -6,7 +6,7 @@ using Watchdog.Api.Services;
 namespace Watchdog.WebApi.Controllers;
 
 [ApiController]
-[Route("api/[controller]")]
+[Route("api/")]
 public class AgentsController : ControllerBase
 {
     private readonly IAgentManager _agentManager;
@@ -20,7 +20,7 @@ public class AgentsController : ControllerBase
         _logger = logger;
     }
     
-    [HttpGet]
+    [HttpGet("agent")]
     public async Task<ActionResult<IEnumerable<Agent>>> GetAll()
     {
         try
@@ -35,7 +35,7 @@ public class AgentsController : ControllerBase
         }
     }
     
-    [HttpGet("{id}")]
+    [HttpGet("agent/{id}")]
     public async Task<ActionResult<Agent>> GetById(string id)
     {
         try
@@ -54,7 +54,7 @@ public class AgentsController : ControllerBase
         }
     }
     
-    [HttpPost("{id}/heartbeat")]
+    [HttpPost("agent/{id}/heartbeat")]
     public async Task<ActionResult> Heartbeat(string id)
     {
         try
@@ -73,7 +73,7 @@ public class AgentsController : ControllerBase
         }
     }
     
-    [HttpPost("{agentId}/applications/{applicationId}/assign")]
+    [HttpPost("agent/{agentId}/application/{applicationId}/assign")]
     public async Task<ActionResult> AssignApplication(string agentId, string applicationId)
     {
         try
@@ -93,7 +93,7 @@ public class AgentsController : ControllerBase
         }
     }
     
-    [HttpGet("{id}/applications")]
+    [HttpGet("agent/{id}/application")]
     public async Task<ActionResult<IEnumerable<Application>>> GetAgentApplications(string id)
     {
         try

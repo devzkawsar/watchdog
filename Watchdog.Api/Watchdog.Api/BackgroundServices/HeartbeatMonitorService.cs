@@ -2,15 +2,15 @@ using Watchdog.Api.Interface;
 
 namespace Watchdog.Api.BackgroundServices;
 
-public class HeartbeatMonitorBackgroundService : BackgroundService
+public class HeartbeatMonitorService : BackgroundService
 {
     private readonly IServiceScopeFactory _scopeFactory;
-    private readonly ILogger<HeartbeatMonitorBackgroundService> _logger;
+    private readonly ILogger<HeartbeatMonitorService> _logger;
     private readonly TimeSpan _interval = TimeSpan.FromSeconds(10);
 
-    public HeartbeatMonitorBackgroundService(
+    public HeartbeatMonitorService(
         IServiceScopeFactory scopeFactory,
-        ILogger<HeartbeatMonitorBackgroundService> logger)
+        ILogger<HeartbeatMonitorService> logger)
     {
         _scopeFactory = scopeFactory;
         _logger = logger;

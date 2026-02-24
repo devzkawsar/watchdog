@@ -7,17 +7,17 @@ using Watchdog.Api.Services;
 
 namespace Watchdog.Api.BackgroundServices;
 
-public class CommandDispatcherBackgroundService : BackgroundService
+public class CommandDispatcherService : BackgroundService
 {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IAgentGrpcService _agentGrpcService;
-    private readonly ILogger<CommandDispatcherBackgroundService> _logger;
+    private readonly ILogger<CommandDispatcherService> _logger;
     private readonly TimeSpan _interval = TimeSpan.FromSeconds(10);
     
-    public CommandDispatcherBackgroundService(
+    public CommandDispatcherService(
         IServiceScopeFactory scopeFactory,
         IAgentGrpcService agentGrpcService,
-        ILogger<CommandDispatcherBackgroundService> logger)
+        ILogger<CommandDispatcherService> logger)
     {
         _scopeFactory = scopeFactory;
         _agentGrpcService = agentGrpcService;

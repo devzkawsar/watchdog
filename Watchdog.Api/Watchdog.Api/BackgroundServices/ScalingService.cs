@@ -3,15 +3,15 @@ using Watchdog.Api.Services;
 
 namespace Watchdog.Api.BackgroundServices;
 
-public class ScalingBackgroundService : BackgroundService
+public class ScalingService : BackgroundService
 {
     private readonly IServiceScopeFactory _scopeFactory;
-    private readonly ILogger<ScalingBackgroundService> _logger;
+    private readonly ILogger<ScalingService> _logger;
     private readonly TimeSpan _interval = TimeSpan.FromSeconds(60); // Check every minute
     
-    public ScalingBackgroundService(
+    public ScalingService(
         IServiceScopeFactory scopeFactory,
-        ILogger<ScalingBackgroundService> logger)
+        ILogger<ScalingService> logger)
     {
         _scopeFactory = scopeFactory;
         _logger = logger;

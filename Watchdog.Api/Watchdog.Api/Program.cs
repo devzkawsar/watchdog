@@ -57,10 +57,10 @@ builder.Services.AddGrpc(options =>
 });
 
 // Background Services
-builder.Services.AddHostedService<ScalingBackgroundService>();
-builder.Services.AddHostedService<CommandDispatcherBackgroundService>();
-builder.Services.AddHostedService<GrpcConnectionCleanupBackgroundService>();
-builder.Services.AddHostedService<HeartbeatMonitorBackgroundService>();
+builder.Services.AddHostedService<ScalingService>();
+builder.Services.AddHostedService<CommandDispatcherService>();
+builder.Services.AddHostedService<GrpcConnectionCleanupService>();
+builder.Services.AddHostedService<HeartbeatMonitorService>();
 
 builder.Services.AddHttpClient();
 

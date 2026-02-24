@@ -3,15 +3,15 @@ using Watchdog.Api.Services;
 
 namespace Watchdog.Api.BackgroundServices;
 
-public class GrpcConnectionCleanupBackgroundService : BackgroundService
+public class GrpcConnectionCleanupService : BackgroundService
 {
     private readonly IAgentGrpcService _agentGrpcService;
-    private readonly ILogger<GrpcConnectionCleanupBackgroundService> _logger;
+    private readonly ILogger<GrpcConnectionCleanupService> _logger;
     private readonly TimeSpan _interval = TimeSpan.FromMinutes(5);
     
-    public GrpcConnectionCleanupBackgroundService(
+    public GrpcConnectionCleanupService(
         IAgentGrpcService agentGrpcService,
-        ILogger<GrpcConnectionCleanupBackgroundService> logger)
+        ILogger<GrpcConnectionCleanupService> logger)
     {
         _agentGrpcService = agentGrpcService;
         _logger = logger;

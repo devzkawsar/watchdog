@@ -7,7 +7,7 @@ using Watchdog.Api.Services;
 namespace Watchdog.Api.Controllers;
 
 [ApiController]
-[Route("api/[controller]")]
+[Route("api/")]
 public class ApplicationsController : ControllerBase
 {
     private readonly IApplicationManager _applicationManager;
@@ -21,7 +21,7 @@ public class ApplicationsController : ControllerBase
         _logger = logger;
     }
     
-    [HttpGet]
+    [HttpGet("application")]
     public async Task<ActionResult<IEnumerable<Application>>> GetAll()
     {
         try
@@ -36,7 +36,7 @@ public class ApplicationsController : ControllerBase
         }
     }
     
-    [HttpGet("{id}")]
+    [HttpGet("application/{id}")]
     public async Task<ActionResult<Application>> GetById(string id)
     {
         try
@@ -55,7 +55,7 @@ public class ApplicationsController : ControllerBase
         }
     }
     
-    [HttpPost]
+    [HttpPost("application/register")]
     public async Task<ActionResult<Application>> Create([FromBody] CreateApplicationRequest request)
     {
         try
@@ -73,7 +73,7 @@ public class ApplicationsController : ControllerBase
         }
     }
     
-    [HttpPut("{id}")]
+    [HttpPut("application/{id}/update")]
     public async Task<ActionResult<Application>> Update(string id, [FromBody] UpdateApplicationRequest request)
     {
         try
@@ -96,7 +96,7 @@ public class ApplicationsController : ControllerBase
         }
     }
     
-    [HttpDelete("{id}")]
+    [HttpDelete("application/{id}/delete")]
     public async Task<ActionResult> Delete(string id)
     {
         try
@@ -115,7 +115,7 @@ public class ApplicationsController : ControllerBase
         }
     }
     
-    [HttpGet("{id}/instances")]
+    [HttpGet("application/{id}/instance")]
     public async Task<ActionResult<IEnumerable<ApplicationInstance>>> GetInstances(string id)
     {
         try
@@ -130,7 +130,7 @@ public class ApplicationsController : ControllerBase
         }
     }
     
-    [HttpPost("{id}/start")]
+    [HttpPost("application/{id}/start")]
     public async Task<ActionResult> Start(string id)
     {
         try
@@ -149,7 +149,7 @@ public class ApplicationsController : ControllerBase
         }
     }
     
-    [HttpPost("{id}/stop")]
+    [HttpPost("application/{id}/stop")]
     public async Task<ActionResult> Stop(string id)
     {
         try
@@ -168,7 +168,7 @@ public class ApplicationsController : ControllerBase
         }
     }
     
-    [HttpPost("{id}/restart")]
+    [HttpPost("application/{id}/restart")]
     public async Task<ActionResult> Restart(string id)
     {
         try
