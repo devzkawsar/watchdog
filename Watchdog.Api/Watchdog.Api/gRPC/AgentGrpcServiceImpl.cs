@@ -72,6 +72,7 @@ public class AgentGrpcServiceImpl : AgentService.AgentServiceBase
                 DesiredInstances = app.DesiredInstances,
                 BuiltInPort = app.BuiltInPort ?? 0,
                 EnvironmentVariables = { app.EnvironmentVariables },
+                ApplicationType = app.ApplicationType
             }).ToList();
             
 
@@ -455,7 +456,8 @@ public class AgentGrpcServiceImpl : AgentService.AgentServiceBase
                         Arguments = spawnParams.Arguments,
                         WorkingDirectory = spawnParams.WorkingDirectory,
                         Port = spawnParams.Port,
-                        HealthCheckInterval = spawnParams.HealthCheckInterval
+                        HealthCheckInterval = spawnParams.HealthCheckInterval,
+                        ApplicationType = spawnParams.ApplicationType
                     };
                 }
                 break;
@@ -506,6 +508,7 @@ public class SpawnCommandParams
     public int Port { get; set; }
     public int HealthCheckInterval { get; set; } = 30;
     public int InstanceIndex { get; set; }
+    public int ApplicationType { get; set; }
 }
 
 public class KillCommandParams
