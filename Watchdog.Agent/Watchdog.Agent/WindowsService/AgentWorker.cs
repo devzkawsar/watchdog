@@ -18,6 +18,7 @@ public class AgentWorker : BackgroundService
     
     private Timer? _statusReportTimer;
     private Timer? _reconnectTimer;
+    private Timer? _stateSyncTimer;
     private bool _isRunning = false;
     private int _registrationAttempts = 0;
     
@@ -66,6 +67,13 @@ public class AgentWorker : BackgroundService
             // Start reconnect timer (every 30 seconds)
             _reconnectTimer = new Timer(
                 async _ => await CheckConnectionAndReconnect(stoppingToken),
+                null,
+                TimeSpan.FromSeconds(30),
+                TimeSpan.FromSeconds(30));
+            
+            // Start state sync timer (every 30 seconds) - keeps agent-state.json in sync with Watchdog API
+            _stateSyncTimer = new Timer(
+                async _ => await SyncStateFromApi(stoppingToken),
                 null,
                 TimeSpan.FromSeconds(30),
                 TimeSpan.FromSeconds(30));
@@ -190,12 +198,56 @@ public class AgentWorker : BackgroundService
         }
     }
     
+    private async Task SyncStateFromApi(CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (!_isRunning)
+                return;
+            
+            var isConnected = await _grpcClient.IsConnected();
+            if (!isConnected)
+            {
+                _logger.LogDebug("Not connected to control plane, skipping state sync");
+                return;
+            }
+            
+            _logger.LogInformation("Syncing state from Watchdog API...");
+            
+            var registration = await _grpcClient.Register(cancellationToken);
+            if (registration == null || !registration.Success)
+            {
+                _logger.LogWarning("State sync failed: registration returned unsuccessful");
+                return;
+            }
+            
+            // Always sync applications (even empty list removes stale apps)
+            await _applicationManager.UpdateApplicationsFromControlPlane(
+                registration.Applications.ToList());
+            
+            // Always sync instances (even empty list removes stale instances)
+            await _applicationManager.SyncInstancesFromApi(
+                registration.ActiveInstances.ToList());
+            
+            _logger.LogInformation("State sync completed - Apps: {AppCount}, Instances: {InstanceCount}",
+                registration.Applications.Count, registration.ActiveInstances.Count);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error syncing state from API");
+        }
+    }
+    
     private async Task Cleanup()
     {
         _isRunning = false;
         
         _statusReportTimer?.Dispose();
         _reconnectTimer?.Dispose();
+        _stateSyncTimer?.Dispose();
+
+        // Clear agent-state.json on shutdown
+        await _applicationManager.ClearState();
 
         await _grpcClient.Disconnect();
         

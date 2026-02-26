@@ -231,6 +231,7 @@ CREATE TABLE metrics_history (
      agent_id VARCHAR(50),
      instance_id VARCHAR(100),
     
+     -- System Metrics
      cpu_percent DECIMAL(5,2),
      memory_mb DECIMAL(10,2),
      memory_percent DECIMAL(5,2),
@@ -248,6 +249,12 @@ CREATE TABLE metrics_history (
      uptime_seconds INT,
      user_processor_time INT,
      privileged_processor_time INT,
+
+     -- Queue Metrics
+     queue_name VARCHAR(255) NULL,
+     queue_length BIGINT NULL,
+     queue_ready BIGINT NULL,
+     queue_unacknowledged BIGINT NULL,
     
      collection_interval INT DEFAULT 10,
      timestamp DATETIME2 DEFAULT GETUTCDATE(),
@@ -293,3 +300,4 @@ CREATE INDEX ix_command_queue_instance_id ON command_queue (instance_id);
 CREATE INDEX ix_metrics_history_instance_timestamp ON metrics_history (instance_id, timestamp);
 CREATE INDEX ix_metrics_history_agent_timestamp ON metrics_history (agent_id, timestamp);
 CREATE INDEX ix_metrics_history_timestamp ON metrics_history (timestamp);
+CREATE INDEX ix_metrics_history_queue_name ON metrics_history (queue_name) WHERE queue_name IS NOT NULL;

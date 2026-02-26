@@ -22,4 +22,5 @@ public interface IApplicationManager
     Task IncrementRestartCount(string instanceId);
     Task NotifyInstanceStopped(string instanceId, int exitCode, string reason);
     Task SyncInstancesFromApi(List<Watchdog.Api.Protos.ApplicationStatus> activeInstances);
+    Task ClearState();
 }

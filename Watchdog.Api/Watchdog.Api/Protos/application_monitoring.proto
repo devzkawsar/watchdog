@@ -9,6 +9,7 @@ service ApplicationMonitoringService {
   rpc Ready (ApplicationReadyRequest) returns (ApplicationReadyResponse);
   rpc RecordHeartbeat (ApplicationHeartbeatRequest) returns (ApplicationHeartbeatResponse);
   rpc RecordPerformanceMetric (PerformanceMetricRequest) returns (PerformanceMetricResponse);
+  rpc RecordMetrics (RecordMetricsRequest) returns (RecordMetricsResponse);
 }
 
 message ApplicationRegistrationRequest {
@@ -67,6 +68,44 @@ message PerformanceMetricRequest {
 }
 
 message PerformanceMetricResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message RecordMetricsRequest {
+  string agent_id = 1;
+  string instance_id = 2;
+
+  // System metrics
+  double cpu_percent = 3;
+  double memory_mb = 4;
+  double memory_percent = 5;
+  double disk_usage_percent = 6;
+  int64 network_bytes_sent = 7;
+  int64 network_bytes_received = 8;
+
+  int32 thread_count = 9;
+  int32 handle_count = 10;
+  int64 io_read_bytes = 11;
+  int64 io_write_bytes = 12;
+  int64 private_bytes = 13;
+  int64 working_set = 14;
+
+  int32 uptime_seconds = 15;
+  int32 user_processor_time = 16;
+  int32 privileged_processor_time = 17;
+
+  // Queue metrics
+  string queue_name = 20;
+  int64 queue_length = 21;
+  int64 queue_ready = 22;
+  int64 queue_unacknowledged = 23;
+
+  int32 collection_interval = 18;
+  int64 timestamp_unix_seconds = 19;
+}
+
+message RecordMetricsResponse {
   bool success = 1;
   string message = 2;
 }

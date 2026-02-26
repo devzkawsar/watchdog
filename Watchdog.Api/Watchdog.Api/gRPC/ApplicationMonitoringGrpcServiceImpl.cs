@@ -40,25 +40,25 @@ public class ApplicationMonitoringGrpcServiceImpl : ApplicationMonitoringService
             return;
         }
 
-        const string insertApplicationSql = @"
-            INSERT INTO application
-                (id, name, display_name, executable_path, arguments, working_directory,
-                 application_type,  health_check_interval, heartbeat_timeout,
-                 desired_instances, min_instances, max_instances,
-                 environment_variables, auto_start, created, created_by)
-            VALUES
-                (@Id, @Name, @DisplayName, @ExecutablePath, '', '',
-                 0, 30, 120,
-                 0, 0, 0,
-                 '{}', 0, GETUTCDATE(), NULL)";
-
-        await connection.ExecuteAsync(insertApplicationSql, new
-        {
-            Id = applicationId,
-            Name = applicationId,
-            DisplayName = applicationId,
-            ExecutablePath = ""
-        });
+        // const string insertApplicationSql = @"
+        //     INSERT INTO application
+        //         (id, name, display_name, executable_path, arguments, working_directory,
+        //          application_type,  health_check_interval, heartbeat_timeout,
+        //          desired_instances, min_instances, max_instances,
+        //          environment_variables, auto_start, created, created_by)
+        //     VALUES
+        //         (@Id, @Name, @DisplayName, @ExecutablePath, '', '',
+        //          0, 30, 120,
+        //          0, 0, 0,
+        //          '{}', 0, GETUTCDATE(), NULL)";
+        //
+        // await connection.ExecuteAsync(insertApplicationSql, new
+        // {
+        //     Id = applicationId,
+        //     Name = applicationId,
+        //     DisplayName = applicationId,
+        //     ExecutablePath = ""
+        // });
     }
 
     public override async Task<ApplicationRegistrationResponse> RegisterApplication(
@@ -315,60 +315,110 @@ public class ApplicationMonitoringGrpcServiceImpl : ApplicationMonitoringService
         PerformanceMetricRequest request,
         ServerCallContext context)
     {
+        // Legacy RPC — kept for backward compat, no DB write
+        return new PerformanceMetricResponse { Success = true, Message = "Acknowledged" };
+    }
+
+    public override async Task<RecordMetricsResponse> RecordMetrics(
+        RecordMetricsRequest request,
+        ServerCallContext context)
+    {
         try
         {
             using var connection = _connectionFactory.CreateConnection();
 
-            await EnsureApplicationExistsAsync(connection, request.ApplicationId);
-
             var instanceId = string.IsNullOrWhiteSpace(request.InstanceId)
-                ? request.ApplicationId
+                ? null
                 : request.InstanceId;
 
-            const string upsertInstanceSql = @"
-                IF NOT EXISTS (SELECT 1 FROM application_instance WHERE instance_id = @InstanceId)
-                BEGIN
-                    INSERT INTO application_instance
-                        (instance_id, application_id, agent_id, status, is_ready, created_at, updated_at, last_heartbeat)
-                    VALUES
-                        (@InstanceId, @ApplicationId, NULL, 'starting', 0, GETUTCDATE(), GETUTCDATE(), GETUTCDATE())
-                END";
+            var agentId = string.IsNullOrWhiteSpace(request.AgentId)
+                ? null
+                : request.AgentId;
 
-            await connection.ExecuteAsync(upsertInstanceSql, new
+            // Ensure instance row exists if instanceId provided
+            if (instanceId != null)
             {
-                InstanceId = instanceId,
-                ApplicationId = request.ApplicationId
-            });
+                const string upsertInstanceSql = @"
+                    IF NOT EXISTS (SELECT 1 FROM application_instance WHERE instance_id = @InstanceId)
+                    BEGIN
+                        INSERT INTO application_instance
+                            (instance_id, application_id, agent_id, status, is_ready, created_at, updated_at, last_heartbeat)
+                        VALUES
+                            (@InstanceId, @InstanceId, NULL, 'running', 1, GETUTCDATE(), GETUTCDATE(), GETUTCDATE())
+                    END";
+
+                await connection.ExecuteAsync(upsertInstanceSql, new { InstanceId = instanceId });
+            }
+
+            var timestamp = request.TimestampUnixSeconds > 0
+                ? ToUtcDateTimeFromUnixSeconds(request.TimestampUnixSeconds)
+                : DateTime.UtcNow;
 
             const string sql = @"
-                INSERT INTO metrics_history (instance_id, application_id, metric_name, metric_value, details, recorded_at, created_at)
-                VALUES (@InstanceId, @ApplicationId, @MetricName, @MetricValue, @Details, @RecordedAt, GETUTCDATE())";
+                INSERT INTO metrics_history (
+                    agent_id, instance_id,
+                    cpu_percent, memory_mb, memory_percent,
+                    disk_usage_percent,
+                    network_bytes_sent, network_bytes_received,
+                    thread_count, handle_count,
+                    io_read_bytes, io_write_bytes,
+                    private_bytes, working_set,
+                    uptime_seconds, user_processor_time, privileged_processor_time,
+                    queue_name, queue_length, queue_ready, queue_unacknowledged,
+                    collection_interval, timestamp
+                ) VALUES (
+                    @AgentId, @InstanceId,
+                    @CpuPercent, @MemoryMb, @MemoryPercent,
+                    @DiskUsagePercent,
+                    @NetworkBytesSent, @NetworkBytesReceived,
+                    @ThreadCount, @HandleCount,
+                    @IoReadBytes, @IoWriteBytes,
+                    @PrivateBytes, @WorkingSet,
+                    @UptimeSeconds, @UserProcessorTime, @PrivilegedProcessorTime,
+                    @QueueName, @QueueLength, @QueueReady, @QueueUnacknowledged,
+                    @CollectionInterval, @Timestamp
+                )";
 
-            var recordedAt = ToUtcDateTimeFromUnixSeconds(request.RecordedAtUnixSeconds);
-            
             await connection.ExecuteAsync(sql, new
             {
+                AgentId = agentId,
                 InstanceId = instanceId,
-                ApplicationId = request.ApplicationId,
-                MetricName = "PerformanceMetric",
-                MetricValue = request.Quantity,
-                Details = $"{{\"startTimeUnixSeconds\":{request.StartTimeUnixSeconds},\"endTimeUnixSeconds\":{request.EndTimeUnixSeconds},\"quantity\":{request.Quantity},\"delta\":{request.Delta}}}",
-                RecordedAt = recordedAt
+                CpuPercent = (decimal)request.CpuPercent,
+                MemoryMb = (decimal)request.MemoryMb,
+                MemoryPercent = (decimal)request.MemoryPercent,
+                DiskUsagePercent = (decimal)request.DiskUsagePercent,
+                NetworkBytesSent = request.NetworkBytesSent,
+                NetworkBytesReceived = request.NetworkBytesReceived,
+                ThreadCount = request.ThreadCount,
+                HandleCount = request.HandleCount,
+                IoReadBytes = request.IoReadBytes,
+                IoWriteBytes = request.IoWriteBytes,
+                PrivateBytes = request.PrivateBytes,
+                WorkingSet = request.WorkingSet,
+                UptimeSeconds = request.UptimeSeconds,
+                UserProcessorTime = request.UserProcessorTime,
+                PrivilegedProcessorTime = request.PrivilegedProcessorTime,
+                QueueName = string.IsNullOrWhiteSpace(request.QueueName) ? (string?)null : request.QueueName,
+                QueueLength = request.QueueLength,
+                QueueReady = request.QueueReady,
+                QueueUnacknowledged = request.QueueUnacknowledged,
+                CollectionInterval = request.CollectionInterval > 0 ? request.CollectionInterval : 10,
+                Timestamp = timestamp
             });
 
-            return new PerformanceMetricResponse
+            return new RecordMetricsResponse
             {
                 Success = true,
-                Message = "Metric recorded"
+                Message = "Metrics recorded"
             };
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error recording metric for application {ApplicationId}", request.ApplicationId);
-            return new PerformanceMetricResponse
+            _logger.LogError(ex, "Error recording metrics for instance {InstanceId}", request.InstanceId);
+            return new RecordMetricsResponse
             {
                 Success = false,
-                Message = $"Metric failed: {ex.Message}"
+                Message = $"Metrics failed: {ex.Message}"
             };
         }
     }

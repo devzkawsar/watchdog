@@ -813,5 +813,14 @@ namespace Watchdog.Agent.Services
             // See AgentWorker update.
         }
 
+        public async Task ClearState()
+        {
+            _logger.LogInformation("Clearing agent state...");
+            _applications.Clear();
+            _instances.Clear();
+            await SaveState();
+            _logger.LogInformation("Agent state cleared");
+        }
+
     }
 }
