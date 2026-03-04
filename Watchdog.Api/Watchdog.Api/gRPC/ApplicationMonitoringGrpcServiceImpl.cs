@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Dapper;
 using Grpc.Core;
 using System.Data;
@@ -39,26 +40,6 @@ public class ApplicationMonitoringGrpcServiceImpl : ApplicationMonitoringService
         {
             return;
         }
-
-        // const string insertApplicationSql = @"
-        //     INSERT INTO application
-        //         (id, name, display_name, executable_path, arguments, working_directory,
-        //          application_type,  health_check_interval, heartbeat_timeout,
-        //          desired_instances, min_instances, max_instances,
-        //          environment_variables, auto_start, created, created_by)
-        //     VALUES
-        //         (@Id, @Name, @DisplayName, @ExecutablePath, '', '',
-        //          0, 30, 120,
-        //          0, 0, 0,
-        //          '{}', 0, GETUTCDATE(), NULL)";
-        //
-        // await connection.ExecuteAsync(insertApplicationSql, new
-        // {
-        //     Id = applicationId,
-        //     Name = applicationId,
-        //     DisplayName = applicationId,
-        //     ExecutablePath = ""
-        // });
     }
 
     public override async Task<ApplicationRegistrationResponse> RegisterApplication(
@@ -67,93 +48,6 @@ public class ApplicationMonitoringGrpcServiceImpl : ApplicationMonitoringService
     {
         try
         {
-            using var connection = _connectionFactory.CreateConnection();
-
-            var exists = await connection.ExecuteScalarAsync<int>(
-                "SELECT COUNT(1) FROM application WHERE id = @Id",
-                new { Id = request.ApplicationId });
-
-            if (exists <= 0)
-            {
-                const string insertApplicationSql = @"
-                    INSERT INTO application
-                        (id, name, display_name, executable_path, arguments, working_directory,
-                         application_type, heartbeat_timeout,
-                         desired_instances, min_instances, max_instances,
-                         environment_variables, auto_start, created, created_by)
-                    VALUES
-                        (@Id, @Name, @DisplayName, @ExecutablePath, @Arguments, '',
-                         @ApplicationType, @HeartbeatTimeout,
-                         1,1,2,
-                         '{}', 0, GETUTCDATE(), NULL)";
-
-                var heartbeatTimeout = Math.Max(30, request.ExpectedHeartbeatIntervalSeconds * 2);
-
-                await connection.ExecuteAsync(insertApplicationSql, new
-                {
-                    Id = request.ApplicationId,
-                    Name = request.ApplicationName,
-                    DisplayName = request.ApplicationName,
-                    ExecutablePath = request.ExecutablePath ?? string.Empty,
-                    Arguments = request.Arguments ?? string.Empty,
-                    ApplicationType = request.ApplicationType,
-                    HeartbeatTimeout = heartbeatTimeout
-                });
-            }
-            else
-            {
-                const string updateApplicationSql = @"
-                    UPDATE application
-                    SET name = @Name,
-                        display_name = @DisplayName,
-                        executable_path = @ExecutablePath,
-                        arguments = @Arguments,
-                        application_type = @ApplicationType,
-                        updated = GETUTCDATE(),
-                        updated_by = NULL
-                    WHERE id = @Id";
-
-                await connection.ExecuteAsync(updateApplicationSql, new
-                {
-                    Id = request.ApplicationId,
-                    Name = request.ApplicationName,
-                    DisplayName = request.ApplicationName,
-                    ExecutablePath = request.ExecutablePath ?? string.Empty,
-                    Arguments = request.Arguments ?? string.Empty,
-                    ApplicationType = request.ApplicationType
-                });
-            }
-
-            const string upsertInstanceSql = @"
-                IF EXISTS (SELECT 1 FROM application_instance WHERE instance_id = @InstanceId)
-                BEGIN
-                    UPDATE application_instance
-                    SET application_id = @ApplicationId,
-                        status = 'starting',
-                        last_heartbeat = GETUTCDATE(),
-                        updated_at = GETUTCDATE()
-                    WHERE instance_id = @InstanceId
-                END
-                ELSE
-                BEGIN
-                    INSERT INTO application_instance
-                        (instance_id, application_id, agent_id, status, is_ready, created_at, updated_at, last_heartbeat)
-                    VALUES
-                        (@InstanceId, @ApplicationId, NULL, 'starting', 0, GETUTCDATE(), GETUTCDATE(), GETUTCDATE())
-                END";
-
-            var instanceId = string.IsNullOrWhiteSpace(request.InstanceId)
-                ? request.ApplicationId
-                : request.InstanceId;
-
-            await connection.ExecuteAsync(upsertInstanceSql, new
-            {
-                InstanceId = instanceId,
-                ApplicationId = request.ApplicationId
-            });
-
-
-
             return new ApplicationRegistrationResponse
             {
                 Success = true,
@@ -179,17 +73,15 @@ public class ApplicationMonitoringGrpcServiceImpl : ApplicationMonitoringService
         {
             using var connection = _connectionFactory.CreateConnection();
 
-            // await EnsureApplicationExistsAsync(connection, request.ApplicationId);
-
-            var instanceId = string.IsNullOrWhiteSpace(request.InstanceId)
-                ? request.ApplicationId
-                : request.InstanceId;
+            var instanceId = request.InstanceId;
+            
+            _logger.LogDebug("Error recording ready for application instance {ApplicationId}", instanceId);
 
             const string upsertInstanceSql = @"
                 IF EXISTS (SELECT 1 FROM application_instance WHERE instance_id = @InstanceId)
                 BEGIN
                     UPDATE application_instance
-                    SET application_id = @ApplicationId,
+                    SET
                         is_ready = 1,
                         ready_at = @ReadyAt,
                         status = 'running',
@@ -198,13 +90,6 @@ public class ApplicationMonitoringGrpcServiceImpl : ApplicationMonitoringService
                         last_heartbeat = GETUTCDATE(),
                         updated_at = GETUTCDATE()
                     WHERE instance_id = @InstanceId
-                END
-                ELSE
-                BEGIN
-                    INSERT INTO application_instance
-                        (instance_id, application_id, agent_id, status, is_ready, ready_at, process_id, assigned_port, created_at, updated_at, last_heartbeat)
-                    VALUES
-                        (@InstanceId, @ApplicationId, NULL, 'running', 1, @ReadyAt, @ProcessId, @AssignedPort, GETUTCDATE(), GETUTCDATE(), GETUTCDATE())
                 END";
 
             var readyAt = ToUtcDateTimeFromUnixSeconds(request.TimestampUnixSeconds);
@@ -217,8 +102,6 @@ public class ApplicationMonitoringGrpcServiceImpl : ApplicationMonitoringService
                 ProcessId = request.ProcessId > 0 ? (int?)request.ProcessId : null,
                 AssignedPort = request.AssignedPort > 0 ? (int?)request.AssignedPort : null
             });
-
-
 
             return new ApplicationReadyResponse
             {
@@ -247,26 +130,18 @@ public class ApplicationMonitoringGrpcServiceImpl : ApplicationMonitoringService
 
             await EnsureApplicationExistsAsync(connection, request.ApplicationId);
 
-            var instanceId = string.IsNullOrWhiteSpace(request.InstanceId)
-                ? request.ApplicationId
-                : request.InstanceId;
-
+            var instanceId =  request.InstanceId;
+            Console.WriteLine(instanceId);
             const string upsertInstanceSql = @"
                 IF EXISTS (SELECT 1 FROM application_instance WHERE instance_id = @InstanceId)
                 BEGIN
                     UPDATE application_instance
                     SET application_id = @ApplicationId,
                         last_heartbeat = GETUTCDATE(),
-                        status = CASE WHEN is_ready = 1 THEN 'running' ELSE 'starting' END,
+                        is_ready = 1,
+                        status = 'running',
                         updated_at = GETUTCDATE()
                     WHERE instance_id = @InstanceId
-                END
-                ELSE
-                BEGIN
-                    INSERT INTO application_instance
-                        (instance_id, application_id, agent_id, status, is_ready, created_at, updated_at, last_heartbeat)
-                    VALUES
-                        (@InstanceId, @ApplicationId, NULL, 'starting', 0, GETUTCDATE(), GETUTCDATE(), GETUTCDATE())
                 END";
 
             await connection.ExecuteAsync(upsertInstanceSql, new
@@ -315,7 +190,6 @@ public class ApplicationMonitoringGrpcServiceImpl : ApplicationMonitoringService
         PerformanceMetricRequest request,
         ServerCallContext context)
     {
-        // Legacy RPC — kept for backward compat, no DB write
         return new PerformanceMetricResponse { Success = true, Message = "Acknowledged" };
     }
 
@@ -327,84 +201,126 @@ public class ApplicationMonitoringGrpcServiceImpl : ApplicationMonitoringService
         {
             using var connection = _connectionFactory.CreateConnection();
 
-            var instanceId = string.IsNullOrWhiteSpace(request.InstanceId)
-                ? null
-                : request.InstanceId;
+            var instanceId = string.IsNullOrWhiteSpace(request.InstanceId) ? null : request.InstanceId;
 
-            var agentId = string.IsNullOrWhiteSpace(request.AgentId)
-                ? null
-                : request.AgentId;
-
-            // Ensure instance row exists if instanceId provided
-            if (instanceId != null)
+            if (instanceId == null)
             {
-                const string upsertInstanceSql = @"
-                    IF NOT EXISTS (SELECT 1 FROM application_instance WHERE instance_id = @InstanceId)
-                    BEGIN
-                        INSERT INTO application_instance
-                            (instance_id, application_id, agent_id, status, is_ready, created_at, updated_at, last_heartbeat)
-                        VALUES
-                            (@InstanceId, @InstanceId, NULL, 'running', 1, GETUTCDATE(), GETUTCDATE(), GETUTCDATE())
-                    END";
-
-                await connection.ExecuteAsync(upsertInstanceSql, new { InstanceId = instanceId });
+                _logger.LogError("Error recording metrics for instance {InstanceId}", request.InstanceId);
+                return new RecordMetricsResponse
+                {
+                    Success = false,
+                    Message = $"Metrics failed: InstanceId is null"
+                };
             }
 
             var timestamp = request.TimestampUnixSeconds > 0
                 ? ToUtcDateTimeFromUnixSeconds(request.TimestampUnixSeconds)
                 : DateTime.UtcNow;
 
-            const string sql = @"
-                INSERT INTO metrics_history (
-                    agent_id, instance_id,
-                    cpu_percent, memory_mb, memory_percent,
-                    disk_usage_percent,
-                    network_bytes_sent, network_bytes_received,
-                    thread_count, handle_count,
-                    io_read_bytes, io_write_bytes,
-                    private_bytes, working_set,
-                    uptime_seconds, user_processor_time, privileged_processor_time,
-                    queue_name, queue_length, queue_ready, queue_unacknowledged,
-                    collection_interval, timestamp
-                ) VALUES (
-                    @AgentId, @InstanceId,
-                    @CpuPercent, @MemoryMb, @MemoryPercent,
-                    @DiskUsagePercent,
-                    @NetworkBytesSent, @NetworkBytesReceived,
-                    @ThreadCount, @HandleCount,
-                    @IoReadBytes, @IoWriteBytes,
-                    @PrivateBytes, @WorkingSet,
-                    @UptimeSeconds, @UserProcessorTime, @PrivilegedProcessorTime,
-                    @QueueName, @QueueLength, @QueueReady, @QueueUnacknowledged,
-                    @CollectionInterval, @Timestamp
-                )";
+            // 1. Insert parent row into metrics_snapshot
+            const string insertSnapshotSql = @"
+                INSERT INTO metrics (instance_id, metric_type, payload, timestamp, server_name, payload_generate_datetime)
+                OUTPUT INSERTED.id
+                VALUES (@InstanceId, @MetricType, @Payload, @Timestamp, @ServerName, @PayloadGenerateDatetime)";
 
-            await connection.ExecuteAsync(sql, new
+            var metricId = await connection.ExecuteScalarAsync<long>(insertSnapshotSql, new
             {
-                AgentId = agentId,
                 InstanceId = instanceId,
-                CpuPercent = (decimal)request.CpuPercent,
-                MemoryMb = (decimal)request.MemoryMb,
-                MemoryPercent = (decimal)request.MemoryPercent,
-                DiskUsagePercent = (decimal)request.DiskUsagePercent,
-                NetworkBytesSent = request.NetworkBytesSent,
-                NetworkBytesReceived = request.NetworkBytesReceived,
-                ThreadCount = request.ThreadCount,
-                HandleCount = request.HandleCount,
-                IoReadBytes = request.IoReadBytes,
-                IoWriteBytes = request.IoWriteBytes,
-                PrivateBytes = request.PrivateBytes,
-                WorkingSet = request.WorkingSet,
-                UptimeSeconds = request.UptimeSeconds,
-                UserProcessorTime = request.UserProcessorTime,
-                PrivilegedProcessorTime = request.PrivilegedProcessorTime,
-                QueueName = string.IsNullOrWhiteSpace(request.QueueName) ? (string?)null : request.QueueName,
-                QueueLength = request.QueueLength,
-                QueueReady = request.QueueReady,
-                QueueUnacknowledged = request.QueueUnacknowledged,
-                CollectionInterval = request.CollectionInterval > 0 ? request.CollectionInterval : 10,
-                Timestamp = timestamp
+                MetricType = request.MetricType,
+                Payload = request.Payload,
+                Timestamp = timestamp,
+                ServerName = (string?)null,
+                PayloadGenerateDatetime = timestamp
             });
+
+            // 2. Insert into child table based on MetricType
+            if (!string.IsNullOrWhiteSpace(request.Payload))
+            {
+                using var doc = JsonDocument.Parse(request.Payload);
+                var root = doc.RootElement;
+
+                decimal GetDecimal(string prop) => root.TryGetProperty(prop, out var p) ? (decimal)p.GetDouble() : 0m;
+                double GetDouble(string prop) => root.TryGetProperty(prop, out var p) ? p.GetDouble() : 0d;
+                long GetLong(string prop) => root.TryGetProperty(prop, out var p) ? p.GetInt64() : 0L;
+                int GetInt(string prop) => root.TryGetProperty(prop, out var p) ? p.GetInt32() : 0;
+
+                switch (request.MetricType)
+                {
+                    case 1: // Machine
+                        const string machSql = @"
+                            INSERT INTO machine_metrics_snapshot (metric_id, cpu_percent, memory_mb, memory_percent, disk_usage_percent, thread_count, handle_count)
+                            VALUES (@MetricID, @CpuPercent, @MemoryMb, @MemoryPercent, @DiskUsagePercent, @ThreadCount, @HandleCount)";
+                        await connection.ExecuteAsync(machSql, new
+                        {
+                            MetricID = metricId,
+                            CpuPercent = GetDecimal("CpuPercent"),
+                            MemoryMb = GetDecimal("MemoryMb"),
+                            MemoryPercent = GetDecimal("MemoryPercent"),
+                            DiskUsagePercent = GetDecimal("DiskUsagePercent"),
+                            ThreadCount = GetInt("ThreadCount"),
+                            HandleCount = GetInt("HandleCount")
+                        });
+                        break;
+
+                    case 2: // Queue
+                        const string queueSql = @"
+                            INSERT INTO queue_metrics_snapshot (metric_id, queue_name, queue_length, queue_ready, queue_unacknowledged, incoming_per_sec, deliver_per_sec, ack_per_sec, consumer_count)
+                            VALUES (@MetricID, @QueueName, @QueueLength, @QueueReady, @QueueUnacknowledged, @IncomingPerSec, @DeliverPerSec, @AckPerSec, @ConsumerCount)";
+                        await connection.ExecuteAsync(queueSql, new
+                        {
+                            MetricID = metricId,
+                            QueueName = string.IsNullOrWhiteSpace(request.QueueName) ? (string?)null : request.QueueName,
+                            QueueLength = GetLong("QueueLength"),
+                            QueueReady = GetLong("QueueReady"),
+                            QueueUnacknowledged = GetLong("QueueUnacknowledged"),
+                            IncomingPerSec = GetDouble("IncomingPerSec"),
+                            DeliverPerSec = GetDouble("DeliverPerSec"),
+                            AckPerSec = GetDouble("AckPerSec"),
+                            ConsumerCount = GetInt("ConsumerCount")
+                        });
+                        break;
+
+                    case 3: // Throughput
+                        const string tpSql = @"
+                            INSERT INTO throughput_metrics_snapshot (metric_id, messages_published_per_sec, messages_consumed_per_sec, messages_acked_per_sec, redelivered_per_sec, returned_unroutable_per_sec, global_queue_ready, global_queue_unacknowledged, global_queue_total)
+                            VALUES (@MetricID, @MessagesPublishedPerSec, @MessagesConsumedPerSec, @MessagesAckedPerSec, @RedeliveredPerSec, @ReturnedUnroutablePerSec, @GlobalQueueReady, @GlobalQueueUnacknowledged, @GlobalQueueTotal)";
+                        await connection.ExecuteAsync(tpSql, new
+                        {
+                            MetricID = metricId,
+                            MessagesPublishedPerSec = GetDouble("MessagesPublishedPerSec"),
+                            MessagesConsumedPerSec = GetDouble("MessagesConsumedPerSec"),
+                            MessagesAckedPerSec = GetDouble("MessagesAckedPerSec"),
+                            RedeliveredPerSec = GetDouble("RedeliveredPerSec"),
+                            ReturnedUnroutablePerSec = GetDouble("ReturnedUnroutablePerSec"),
+                            GlobalQueueReady = GetInt("GlobalQueueReady"),
+                            GlobalQueueUnacknowledged = GetInt("GlobalQueueUnacknowledged"),
+                            GlobalQueueTotal = GetInt("GlobalQueueTotal")
+                        });
+                        break;
+
+                    case 4: // Latency
+                        const string latSql = @"
+                            INSERT INTO latency_metrics_snapshot (metric_id, message_latency_ms, ack_latency_ms, end_to_end_latency_ms, p50_latency_ms, p95_latency_ms, p99_latency_ms, max_latency_ms, min_latency_ms)
+                            VALUES (@MetricID, @MessageLatencyMs, @AckLatencyMs, @EndToEndLatencyMs, @P50LatencyMs, @P95LatencyMs, @P99LatencyMs, @MaxLatencyMs, @MinLatencyMs)";
+                        await connection.ExecuteAsync(latSql, new
+                        {
+                            MetricID = metricId,
+                            MessageLatencyMs = GetDouble("MessageLatencyMs"),
+                            AckLatencyMs = GetDouble("AckLatencyMs"),
+                            EndToEndLatencyMs = GetDouble("EndToEndLatencyMs"),
+                            P50LatencyMs = GetDouble("P50LatencyMs"),
+                            P95LatencyMs = GetDouble("P95LatencyMs"),
+                            P99LatencyMs = GetDouble("P99LatencyMs"),
+                            MaxLatencyMs = GetDouble("MaxLatencyMs"),
+                            MinLatencyMs = GetDouble("MinLatencyMs")
+                        });
+                        break;
+
+                    default:
+                        _logger.LogWarning("Unknown MetricType {MetricType} for instance {InstanceId}", request.MetricType, instanceId);
+                        break;
+                }
+            }
 
             return new RecordMetricsResponse
             {
@@ -423,3 +339,4 @@ public class ApplicationMonitoringGrpcServiceImpl : ApplicationMonitoringService
         }
     }
 }
+

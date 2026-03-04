@@ -223,45 +223,95 @@ CREATE TABLE command_queue (
 );
 
 -- =============================================
--- 6. METRICS HISTORY TABLE (Performance Data)
+-- 7. METRICS SNAPSHOT TABLE (Parent)
 -- =============================================
-CREATE TABLE metrics_history (
-     id BIGINT IDENTITY(1,1) PRIMARY KEY,
-    
-     agent_id VARCHAR(50),
-     instance_id VARCHAR(100),
-    
-     -- System Metrics
-     cpu_percent DECIMAL(5,2),
-     memory_mb DECIMAL(10,2),
-     memory_percent DECIMAL(5,2),
-     disk_usage_percent DECIMAL(5,2),
-     network_bytes_sent BIGINT,
-     network_bytes_received BIGINT,
-    
-     thread_count INT,
-     handle_count INT,
-     io_read_bytes BIGINT,
-     io_write_bytes BIGINT,
-     private_bytes BIGINT,
-     working_set BIGINT,
-    
-     uptime_seconds INT,
-     user_processor_time INT,
-     privileged_processor_time INT,
+CREATE TABLE metrics (
+    id BIGINT IDENTITY(1,1) PRIMARY KEY,
+    instance_id VARCHAR(100) NOT NULL,
+    metric_type INT NOT NULL,           -- 1=Machine, 2=Queue, 3=Throughput, 4=Latency
+    payload NVARCHAR(MAX) NULL,         -- raw JSON payload
+    timestamp DATETIME2 DEFAULT GETUTCDATE(),
+    server_name VARCHAR(255) NULL,
+    payload_generate_datetime DATETIME2 NULL,
 
-     -- Queue Metrics
-     queue_name VARCHAR(255) NULL,
-     queue_length BIGINT NULL,
-     queue_ready BIGINT NULL,
-     queue_unacknowledged BIGINT NULL,
-    
-     collection_interval INT DEFAULT 10,
-     timestamp DATETIME2 DEFAULT GETUTCDATE(),
-    
-     CONSTRAINT fk_metrics_agent FOREIGN KEY (agent_id) REFERENCES agent(id),
-     CONSTRAINT fk_metrics_instance FOREIGN KEY (instance_id) REFERENCES application_instance(instance_id)
+    CONSTRAINT fk_metrics_instance
+        FOREIGN KEY (instance_id) REFERENCES application_instance(instance_id)
 );
+
+-- =============================================
+-- 8. MACHINE METRICS SNAPSHOT
+-- =============================================
+CREATE TABLE machine_metrics (
+    id BIGINT IDENTITY(1,1) PRIMARY KEY,
+    metric_id BIGINT NOT NULL,
+    cpu_percent DECIMAL(5,2) NULL,
+    memory_mb DECIMAL(10,2) NULL,
+    memory_percent DECIMAL(5,2) NULL,
+    disk_usage_percent DECIMAL(5,2) NULL,
+    thread_count INT NULL,
+    handle_count INT NULL,
+
+    CONSTRAINT fk_machine_metrics
+        FOREIGN KEY (metric_id) REFERENCES metrics(id)
+);
+
+-- =============================================
+-- 9. QUEUE METRICS SNAPSHOT
+-- =============================================
+CREATE TABLE queue_metrics (
+    id BIGINT IDENTITY(1,1) PRIMARY KEY,
+    metric_id BIGINT NOT NULL,
+    queue_name VARCHAR(255) NULL,
+    queue_length BIGINT NULL,
+    queue_ready BIGINT NULL,
+    queue_unacknowledged BIGINT NULL,
+    incoming_per_sec FLOAT NULL,
+    deliver_per_sec FLOAT NULL,
+    ack_per_sec FLOAT NULL,
+    consumer_count INT NULL,
+
+    CONSTRAINT fk_queue_metrics
+        FOREIGN KEY (metric_id) REFERENCES metrics(id)
+);
+
+-- =============================================
+-- 10. LATENCY METRICS SNAPSHOT
+-- =============================================
+CREATE TABLE latency_metrics (
+    id BIGINT IDENTITY(1,1) PRIMARY KEY,
+    metric_id BIGINT NOT NULL,
+    message_latency_ms FLOAT NULL,
+    ack_latency_ms FLOAT NULL,
+    end_to_end_latency_ms FLOAT NULL,
+    p50_latency_ms FLOAT NULL,
+    p95_latency_ms FLOAT NULL,
+    p99_latency_ms FLOAT NULL,
+    max_latency_ms FLOAT NULL,
+    min_latency_ms FLOAT NULL,
+
+    CONSTRAINT fk_latency_metrics
+        FOREIGN KEY (metric_id) REFERENCES metrics(id)
+);
+
+-- =============================================
+-- 11. THROUGHPUT METRICS SNAPSHOT
+-- =============================================
+CREATE TABLE throughput_metrics (
+    id BIGINT IDENTITY(1,1) PRIMARY KEY,
+    metric_id BIGINT NOT NULL,
+    messages_published_per_sec FLOAT NULL,
+    messages_consumed_per_sec FLOAT NULL,
+    messages_acked_per_sec FLOAT NULL,
+    redelivered_per_sec FLOAT NULL,
+    returned_unroutable_per_sec FLOAT NULL,
+    global_queue_ready INT NULL,
+    global_queue_unacknowledged INT NULL,
+    global_queue_total INT NULL,
+
+    CONSTRAINT fk_throughput_metrics
+        FOREIGN KEY (metric_id) REFERENCES metrics(id)
+);
+
 
 -- =============================================
 -- INDEXES FOR PERFORMANCE
@@ -289,15 +339,21 @@ CREATE INDEX ix_heartbeats_agent_timestamp ON heartbeat (agent_id, timestamp);
 CREATE INDEX ix_heartbeats_instance_timestamp ON heartbeat (instance_id, timestamp);
 CREATE INDEX ix_heartbeats_timestamp ON heartbeat (timestamp);
 
---COMMAND QUEUE INDEXES
+-- Command Queue indexes
 CREATE INDEX ix_command_queue_agent_status ON command_queue (agent_id, status);
 CREATE INDEX ix_command_queue_status_created_at ON command_queue (status, created_at);
 CREATE INDEX ix_command_queue_scheduled_for ON command_queue (scheduled_for);
 CREATE INDEX ix_command_queue_command_id ON command_queue (command_id);
 CREATE INDEX ix_command_queue_instance_id ON command_queue (instance_id);
 
--- MetricsHistory indexes
-CREATE INDEX ix_metrics_history_instance_timestamp ON metrics_history (instance_id, timestamp);
-CREATE INDEX ix_metrics_history_agent_timestamp ON metrics_history (agent_id, timestamp);
-CREATE INDEX ix_metrics_history_timestamp ON metrics_history (timestamp);
-CREATE INDEX ix_metrics_history_queue_name ON metrics_history (queue_name) WHERE queue_name IS NOT NULL;
+-- Metrics Snapshot indexes
+CREATE INDEX ix_metrics_snapshot_instance_timestamp ON metrics(instance_id, timestamp);
+CREATE INDEX ix_metrics_snapshot_metric_type ON metrics (metric_type);
+CREATE INDEX ix_metrics_snapshot_timestamp ON metrics (timestamp);
+
+-- Child metrics indexes
+CREATE INDEX ix_machine_metrics_metric_id ON machine_metrics (metric_id);
+CREATE INDEX ix_queue_metrics_metric_id ON queue_metrics (metric_id);
+CREATE INDEX ix_queue_metrics_queue_name ON queue_metrics (queue_name) WHERE queue_name IS NOT NULL;
+CREATE INDEX ix_latency_metrics_metric_id ON latency_metrics (metric_id);
+CREATE INDEX ix_throughput_metrics_metric_id ON throughput_metrics (metric_id);
