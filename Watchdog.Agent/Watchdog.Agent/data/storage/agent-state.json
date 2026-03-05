@@ -52,7 +52,7 @@
       "RestartCount": 0,
       "LastRestartAttempt": null,
       "LastError": null,
-      "ReattachedAt": "2026-03-05T08:38:55.2080353Z"
+      "ReattachedAt": "2026-03-05T08:39:25.2237234Z"
     },
     {
       "InstanceId": "test-001-local-agent-01-b98251629e28444ab6e9d4fa7c53e78f",
@@ -85,7 +85,7 @@
       "RestartCount": 0,
       "LastRestartAttempt": null,
       "LastError": null,
-      "ReattachedAt": "2026-03-05T08:38:55.2080345Z"
+      "ReattachedAt": "2026-03-05T08:39:25.223722Z"
     },
     {
       "InstanceId": "test-001-local-agent-01-dfee7342ada248d6806570cebe2ef4c9",
@@ -118,8 +118,8 @@
       "RestartCount": 0,
       "LastRestartAttempt": null,
       "LastError": null,
-      "ReattachedAt": "2026-03-05T08:38:55.2080356Z"
+      "ReattachedAt": "2026-03-05T08:39:25.2237237Z"
     }
   ],
-  "SavedAt": "2026-03-05T08:38:55.2080437Z"
+  "SavedAt": "2026-03-05T08:39:25.2237338Z"
 }
