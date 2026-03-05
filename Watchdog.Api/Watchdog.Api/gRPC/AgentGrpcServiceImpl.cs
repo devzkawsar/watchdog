@@ -76,27 +76,27 @@ public class AgentGrpcServiceImpl : AgentService.AgentServiceBase
             }).ToList();
             
 
-            var assignedAppIds = assignedApplications.Select(a => a.Id).ToList();
-            if (assignedAppIds.Any())
-            {
-                var orphanInstances = await _applicationRepository.GetOrphanInstances(assignedAppIds);
-                foreach (var orphan in orphanInstances)
-                {
-                    try
-                    {
-                        var newInstanceId = $"{request.Hostname}-{request.AgentName}-{Guid.NewGuid().ToString("N")}";
-                        
-                        _logger.LogInformation("Claiming orphan instance {OldId} as {NewId} for agent {agent}", 
-                            orphan.InstanceId, newInstanceId, agent.Id);
-                        
-                        await _applicationRepository.ClaimOrphanInstance(orphan.InstanceId, newInstanceId, agent.Id);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, "Failed to claim orphan instance {InstanceId}", orphan.InstanceId);
-                    }
-                }
-            }
+            // var assignedAppIds = assignedApplications.Select(a => a.Id).ToList();
+            // if (assignedAppIds.Any())
+            // {
+            //     var orphanInstances = await _applicationRepository.GetOrphanInstances(assignedAppIds);
+            //     foreach (var orphan in orphanInstances)
+            //     {
+            //         try
+            //         {
+            //             var newInstanceId = $"{request.Hostname}-{request.AgentName}-{Guid.NewGuid().ToString("N")}";
+            //             
+            //             _logger.LogInformation("Claiming orphan instance {OldId} as {NewId} for agent {agent}", 
+            //                 orphan.InstanceId, newInstanceId, agent.Id);
+            //             
+            //             await _applicationRepository.ClaimOrphanInstance(orphan.InstanceId, newInstanceId, agent.Id);
+            //         }
+            //         catch (Exception ex)
+            //         {
+            //             _logger.LogError(ex, "Failed to claim orphan instance {InstanceId}", orphan.InstanceId);
+            //         }
+            //     }
+            // }
            
             var activeInstances = await _applicationRepository.GetActiveInstancesForAgent(agent.Id);
             var activeInstanceStatuses = activeInstances.Select(i => new Watchdog.Api.Protos.ApplicationStatus
@@ -106,20 +106,20 @@ public class AgentGrpcServiceImpl : AgentService.AgentServiceBase
                 Status = i.Status,
                 CpuPercent = i.CpuPercent ?? 0,
                 MemoryMb = i.MemoryMB ?? 0,
-                HealthStatus = "Unknown", // API doesn't store this explicitly properly yet, inferred from status
+                // HealthStatus = "Unknown", // API doesn't store this explicitly properly yet, inferred from status
                 StartTime = i.StartedAt.HasValue ? ((DateTimeOffset)i.StartedAt.Value).ToUnixTimeSeconds() : 0,
                 ProcessId = i.ProcessId?.ToString() ?? "0"
             }).ToList();
             
             // Add assigned ports
-            foreach (var instanceStatus in activeInstanceStatuses)
-            {
-                var originalInstance = activeInstances.First(i => i.InstanceId == instanceStatus.InstanceId);
-                if (originalInstance.AssignedPort.HasValue && originalInstance.AssignedPort.Value > 0)
-                {
-                     instanceStatus.AssignedPort = originalInstance.AssignedPort.Value;
-                }
-            }
+            // foreach (var instanceStatus in activeInstanceStatuses)
+            // {
+            //     var originalInstance = activeInstances.First(i => i.InstanceId == instanceStatus.InstanceId);
+            //     if (originalInstance.AssignedPort.HasValue && originalInstance.AssignedPort.Value > 0)
+            //     {
+            //          instanceStatus.AssignedPort = originalInstance.AssignedPort.Value;
+            //     }
+            // }
             
             return new AgentRegistrationResponse
             {
@@ -152,82 +152,82 @@ public class AgentGrpcServiceImpl : AgentService.AgentServiceBase
             // Update agent heartbeat
             await _agentManager.UpdateAgentHeartbeat(request.AgentId);
             
-            // Process application statuses
-            foreach (var appStatus in request.ApplicationStatuses)
-            {
-                // Ensure we have a valid instance ID
-                if (string.IsNullOrEmpty(appStatus.InstanceId)) continue;
-                
-                // Update instance status in DB
-                int.TryParse(appStatus.ProcessId, out int processId);
-
-                // If this is an adopted instance, check for and remove any orphan record for the same process
-                if (appStatus.InstanceId.Contains("-adopted-") && processId > 0)
-                {
-                    const string findOrphanSql = @"
-                        SELECT instance_id 
-                        FROM application_instance 
-                        WHERE application_id = @ApplicationId 
-                          AND process_id = @ProcessId 
-                          AND agent_id IS NULL";
-                    
-                    var orphanId = await connection.QueryFirstOrDefaultAsync<string>(findOrphanSql, new 
-                    { 
-                        ApplicationId = appStatus.ApplicationId,
-                        ProcessId = processId
-                    });
-
-                    if (!string.IsNullOrEmpty(orphanId))
-                    {
-                        await connection.ExecuteAsync("DELETE FROM application_instance WHERE instance_id = @OrphanId", new { OrphanId = orphanId });
-                        _logger.LogInformation("Removed orphan instance record {OrphanId} in favor of adopted instance {AdoptedId}", orphanId, appStatus.InstanceId);
-                    }
-                }
-                
-                await _applicationRepository.UpdateInstanceStatus(
-                    appStatus.InstanceId, 
-                    NormalizeStatus(appStatus.Status),
-                    appStatus.CpuPercent,
-                    appStatus.MemoryMb,
-                    processId > 0 ? processId : null,
-                    request.AgentId);
-                
-                // If port is reported, update it as well
-                if (appStatus.AssignedPort > 0)
-                {
-                    await RecordApplicationPortsAsync(appStatus.InstanceId, appStatus.AssignedPort);
-                }
-            }
-            
-            // Get pending commands
-            var pendingCommands = await _commandService.GetPendingCommands(request.AgentId);
-            var commandRequests = new List<CommandRequest>();
-            
-            foreach (var cmd in pendingCommands)
-            {
-                // Convert to gRPC command
-                var grpcCommand = new CommandRequest
-                {
-                    CommandId = cmd.CommandId,
-                    CommandType = cmd.CommandType,
-                    ApplicationId = cmd.ApplicationId,
-                    InstanceId = cmd.InstanceId,
-                    Parameters = cmd.Parameters,
-                    Timestamp = cmd.CreatedAt.Ticks,
-                    AgentId = cmd.AgentId
-                };
-                
-                commandRequests.Add(grpcCommand);
-                
-                // Mark as sent
-                await _commandService.MarkCommandAsSent(cmd.CommandId);
-            }
-            
+            // // Process application statuses
+            // foreach (var appStatus in request.ApplicationStatuses)
+            // {
+            //     // Ensure we have a valid instance ID
+            //     if (string.IsNullOrEmpty(appStatus.InstanceId)) continue;
+            //     
+            //     // Update instance status in DB
+            //     int.TryParse(appStatus.ProcessId, out int processId);
+            //
+            //     // If this is an adopted instance, check for and remove any orphan record for the same process
+            //     if (appStatus.InstanceId.Contains("-adopted-") && processId > 0)
+            //     {
+            //         const string findOrphanSql = @"
+            //             SELECT instance_id 
+            //             FROM application_instance 
+            //             WHERE application_id = @ApplicationId 
+            //               AND process_id = @ProcessId 
+            //               AND agent_id IS NULL";
+            //         
+            //         var orphanId = await connection.QueryFirstOrDefaultAsync<string>(findOrphanSql, new 
+            //         { 
+            //             ApplicationId = appStatus.ApplicationId,
+            //             ProcessId = processId
+            //         });
+            //
+            //         if (!string.IsNullOrEmpty(orphanId))
+            //         {
+            //             await connection.ExecuteAsync("DELETE FROM application_instance WHERE instance_id = @OrphanId", new { OrphanId = orphanId });
+            //             _logger.LogInformation("Removed orphan instance record {OrphanId} in favor of adopted instance {AdoptedId}", orphanId, appStatus.InstanceId);
+            //         }
+            //     }
+            //     
+            //     await _applicationRepository.UpdateInstanceStatus(
+            //         appStatus.InstanceId, 
+            //         NormalizeStatus(appStatus.Status),
+            //         appStatus.CpuPercent,
+            //         appStatus.MemoryMb,
+            //         processId > 0 ? processId : null,
+            //         request.AgentId);
+            //     
+            //     // If port is reported, update it as well
+            //     if (appStatus.AssignedPort > 0)
+            //     {
+            //         await RecordApplicationPortsAsync(appStatus.InstanceId, appStatus.AssignedPort);
+            //     }
+            // }
+            //
+            // // Get pending commands
+            // var pendingCommands = await _commandService.GetPendingCommands(request.AgentId);
+            // var commandRequests = new List<CommandRequest>();
+            //
+            // foreach (var cmd in pendingCommands)
+            // {
+            //     // Convert to gRPC command
+            //     var grpcCommand = new CommandRequest
+            //     {
+            //         CommandId = cmd.CommandId,
+            //         CommandType = cmd.CommandType,
+            //         ApplicationId = cmd.ApplicationId,
+            //         InstanceId = cmd.InstanceId,
+            //         Parameters = cmd.Parameters,
+            //         Timestamp = cmd.CreatedAt.Ticks,
+            //         AgentId = cmd.AgentId
+            //     };
+            //     
+            //     commandRequests.Add(grpcCommand);
+            //     
+            //     // Mark as sent
+            //     await _commandService.MarkCommandAsSent(cmd.CommandId);
+            // }
+            //
             return new StatusReportResponse
             {
                 Success = true,
-                Message = "Status processed successfully",
-                PendingCommands = { commandRequests }
+                Message = "Status processed successfully"
+                // PendingCommands = { commandRequests }
             };
         }
         catch (Exception ex)
@@ -290,13 +290,11 @@ public class AgentGrpcServiceImpl : AgentService.AgentServiceBase
                         _logger.LogInformation("Received application spawned report from {AgentId}: {AppId} instance {InstanceId} (PID: {Pid})", 
                             agentId, message.Spawned.ApplicationId, message.Spawned.InstanceId, message.Spawned.ProcessId);
                             
-                        if (agentId != null)
-                        {
-                            await RecordInstanceSpawnedAsync(agentId, message.Spawned);
-                            
-                            // Check for pending commands to execute next
-                            // Note: Commands are pushed via AgentGrpcService, so we don't need to poll here explicitly
-                        }
+                        // if (agentId != null)
+                        // {
+                        //     // await RecordInstanceSpawnedAsync(agentId, message.Spawned);
+                        //     
+                        // }
                         break;
                         
                     case AgentMessage.MessageOneofCase.Stopped:

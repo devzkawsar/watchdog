@@ -20,16 +20,15 @@ public class TestClass : DefaultPEPMonitor
         {
             intervalSeconds = 10;
         }
-
-        Console.WriteLine($"Ins:- {instanceId} - Ag:- {agentId}");
         var config = new MonitoringConfig
         {
             GrpcAddress = grpcAddress,
             MUUID = serviceId,
             InstanceId = instanceId,
-            ApplicationType = 0
+            ApplicationType = 0,
+            AgentId = agentId,
+            ProcessId = Environment.ProcessId,
         };
-
         Configure(config);
 
     }

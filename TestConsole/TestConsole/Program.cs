@@ -5,7 +5,9 @@ using PEPMonitoring.Request;
 using TestConsole;
 
 using var monitor = new TestClass();
-monitor.Ready();
+
+await monitor.Register();
+await monitor.Ready();
 
 using var cts = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) =>

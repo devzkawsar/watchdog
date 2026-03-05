@@ -15,14 +15,14 @@ service ApplicationMonitoringService {
 message ApplicationRegistrationRequest {
   string application_id = 1;
   string instance_id = 2;
-  string application_name = 3;
-  int32 expected_heartbeat_interval_seconds = 4;
-  int64 registered_at_unix_seconds = 5;
-  string executable_path = 6;
-  string arguments = 7;
-  int32 application_type = 8;
+  string agent_id = 3;
+  string application_name = 4;
+  int32 expected_heartbeat_interval_seconds = 5;
+  int64 registered_at_unix_seconds = 6;
+  string executable_path = 7;
+  string arguments = 8;
+  int32 application_type = 9;
 }
-
 message ApplicationRegistrationResponse {
   bool success = 1;
   string message = 2;

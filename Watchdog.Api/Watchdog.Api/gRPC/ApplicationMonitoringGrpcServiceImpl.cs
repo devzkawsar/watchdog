@@ -48,6 +48,49 @@ public class ApplicationMonitoringGrpcServiceImpl : ApplicationMonitoringService
     {
         try
         {
+            using var connection = _connectionFactory.CreateConnection();
+
+            var exists = await connection.ExecuteScalarAsync<int>(
+                "SELECT COUNT(1) FROM application WHERE Id = @Id",
+                new { Id = request.ApplicationId });
+
+            if (exists <= 0)
+            {
+                return new ApplicationRegistrationResponse
+                {
+                    Success = false,
+                    Message = "No Application found"
+                };
+            }
+
+            const string upsertInstanceSql = @"
+                IF EXISTS (SELECT 1 FROM application_instance WHERE instance_id = @InstanceId)
+                BEGIN
+                    UPDATE application_instance
+                    SET application_id = @ApplicationId,
+                        status = 'Starting',
+                        agent_id=@AgentId,
+                        last_heartbeat = GETUTCDATE(),
+                        updated_at = GETUTCDATE()
+                    WHERE instance_id = @InstanceId
+                END
+                ELSE
+                BEGIN
+                    INSERT INTO application_instance
+                        (instance_id, application_id, agent_id, status, started_at, is_ready, created_at, updated_at, last_heartbeat)
+                    VALUES
+                        (@InstanceId, @ApplicationId, @AgentId, 'Starting', GETUTCDATE(), 0, GETUTCDATE(), GETUTCDATE(), GETUTCDATE())
+                END";
+
+            var instanceId = request.InstanceId;
+
+            await connection.ExecuteAsync(upsertInstanceSql, new
+            {
+                InstanceId = instanceId,
+                ApplicationId = request.ApplicationId,
+                AgentId = request.AgentId
+            });
+
             return new ApplicationRegistrationResponse
             {
                 Success = true,
@@ -131,14 +174,11 @@ public class ApplicationMonitoringGrpcServiceImpl : ApplicationMonitoringService
             await EnsureApplicationExistsAsync(connection, request.ApplicationId);
 
             var instanceId =  request.InstanceId;
-            Console.WriteLine(instanceId);
             const string upsertInstanceSql = @"
                 IF EXISTS (SELECT 1 FROM application_instance WHERE instance_id = @InstanceId)
                 BEGIN
                     UPDATE application_instance
-                    SET application_id = @ApplicationId,
-                        last_heartbeat = GETUTCDATE(),
-                        is_ready = 1,
+                    SET last_heartbeat = GETUTCDATE(),
                         status = 'running',
                         updated_at = GETUTCDATE()
                     WHERE instance_id = @InstanceId
@@ -147,7 +187,6 @@ public class ApplicationMonitoringGrpcServiceImpl : ApplicationMonitoringService
             await connection.ExecuteAsync(upsertInstanceSql, new
             {
                 InstanceId = instanceId,
-                ApplicationId = request.ApplicationId
             });
 
             const string sql = @"
@@ -184,13 +223,6 @@ public class ApplicationMonitoringGrpcServiceImpl : ApplicationMonitoringService
                 Message = $"Heartbeat failed: {ex.Message}"
             };
         }
-    }
-
-    public override async Task<PerformanceMetricResponse> RecordPerformanceMetric(
-        PerformanceMetricRequest request,
-        ServerCallContext context)
-    {
-        return new PerformanceMetricResponse { Success = true, Message = "Acknowledged" };
     }
 
     public override async Task<RecordMetricsResponse> RecordMetrics(
@@ -243,12 +275,13 @@ public class ApplicationMonitoringGrpcServiceImpl : ApplicationMonitoringService
                 double GetDouble(string prop) => root.TryGetProperty(prop, out var p) ? p.GetDouble() : 0d;
                 long GetLong(string prop) => root.TryGetProperty(prop, out var p) ? p.GetInt64() : 0L;
                 int GetInt(string prop) => root.TryGetProperty(prop, out var p) ? p.GetInt32() : 0;
+                string GetString(string prop) => root.TryGetProperty(prop, out var p) ? p.GetString() : null;
 
                 switch (request.MetricType)
                 {
                     case 1: // Machine
                         const string machSql = @"
-                            INSERT INTO machine_metrics_snapshot (metric_id, cpu_percent, memory_mb, memory_percent, disk_usage_percent, thread_count, handle_count)
+                            INSERT INTO machine_metrics (metric_id, cpu_percent, memory_mb, memory_percent, disk_usage_percent, thread_count, handle_count)
                             VALUES (@MetricID, @CpuPercent, @MemoryMb, @MemoryPercent, @DiskUsagePercent, @ThreadCount, @HandleCount)";
                         await connection.ExecuteAsync(machSql, new
                         {
@@ -264,12 +297,12 @@ public class ApplicationMonitoringGrpcServiceImpl : ApplicationMonitoringService
 
                     case 2: // Queue
                         const string queueSql = @"
-                            INSERT INTO queue_metrics_snapshot (metric_id, queue_name, queue_length, queue_ready, queue_unacknowledged, incoming_per_sec, deliver_per_sec, ack_per_sec, consumer_count)
+                            INSERT INTO queue_metrics (metric_id, queue_name, queue_length, queue_ready, queue_unacknowledged, incoming_per_sec, deliver_per_sec, ack_per_sec, consumer_count)
                             VALUES (@MetricID, @QueueName, @QueueLength, @QueueReady, @QueueUnacknowledged, @IncomingPerSec, @DeliverPerSec, @AckPerSec, @ConsumerCount)";
                         await connection.ExecuteAsync(queueSql, new
                         {
                             MetricID = metricId,
-                            QueueName = string.IsNullOrWhiteSpace(request.QueueName) ? (string?)null : request.QueueName,
+                            QueueName = GetString("QueueName"),
                             QueueLength = GetLong("QueueLength"),
                             QueueReady = GetLong("QueueReady"),
                             QueueUnacknowledged = GetLong("QueueUnacknowledged"),
@@ -282,7 +315,7 @@ public class ApplicationMonitoringGrpcServiceImpl : ApplicationMonitoringService
 
                     case 3: // Throughput
                         const string tpSql = @"
-                            INSERT INTO throughput_metrics_snapshot (metric_id, messages_published_per_sec, messages_consumed_per_sec, messages_acked_per_sec, redelivered_per_sec, returned_unroutable_per_sec, global_queue_ready, global_queue_unacknowledged, global_queue_total)
+                            INSERT INTO throughput_metrics (metric_id, messages_published_per_sec, messages_consumed_per_sec, messages_acked_per_sec, redelivered_per_sec, returned_unroutable_per_sec, global_queue_ready, global_queue_unacknowledged, global_queue_total)
                             VALUES (@MetricID, @MessagesPublishedPerSec, @MessagesConsumedPerSec, @MessagesAckedPerSec, @RedeliveredPerSec, @ReturnedUnroutablePerSec, @GlobalQueueReady, @GlobalQueueUnacknowledged, @GlobalQueueTotal)";
                         await connection.ExecuteAsync(tpSql, new
                         {
@@ -300,7 +333,7 @@ public class ApplicationMonitoringGrpcServiceImpl : ApplicationMonitoringService
 
                     case 4: // Latency
                         const string latSql = @"
-                            INSERT INTO latency_metrics_snapshot (metric_id, message_latency_ms, ack_latency_ms, end_to_end_latency_ms, p50_latency_ms, p95_latency_ms, p99_latency_ms, max_latency_ms, min_latency_ms)
+                            INSERT INTO latency_metrics (metric_id, message_latency_ms, ack_latency_ms, end_to_end_latency_ms, p50_latency_ms, p95_latency_ms, p99_latency_ms, max_latency_ms, min_latency_ms)
                             VALUES (@MetricID, @MessageLatencyMs, @AckLatencyMs, @EndToEndLatencyMs, @P50LatencyMs, @P95LatencyMs, @P99LatencyMs, @MaxLatencyMs, @MinLatencyMs)";
                         await connection.ExecuteAsync(latSql, new
                         {
